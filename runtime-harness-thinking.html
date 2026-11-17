@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Runtime Harness 与 Agent 基座 · 调研与启发式思考</title>
+  <style>
+    :root {
+      --bg: #f7f4ef;
+      --ink: #1c1a16;
+      --muted: #5c574e;
+      --line: #d9d2c5;
+      --card: #fffdf8;
+      --accent: #0f5c4c;
+      --accent-soft: #e4f0ec;
+      --code-bg: #221f1a;
+      --code-ink: #f2ebe0;
+      --warn: #8a4b12;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #e8efe9 0%, transparent 55%),
+        radial-gradient(900px 400px at 100% 0%, #f0e8d8 0%, transparent 50%),
+        var(--bg);
+      font-family: "Source Han Sans SC", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.7;
+      font-size: 16px;
+    }
+
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 48px 24px 96px;
+    }
+
+    header.hero {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 28px;
+      margin-bottom: 36px;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", Georgia, serif;
+      font-size: clamp(1.8rem, 4vw, 2.4rem);
+      line-height: 1.25;
+      margin: 0 0 14px;
+      font-weight: 700;
+    }
+
+    .lede {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 46em;
+      margin: 0;
+    }
+
+    .meta {
+      margin-top: 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .chip {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid #c6ddd5;
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 13px;
+    }
+
+    nav.toc {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px 22px;
+      margin-bottom: 40px;
+    }
+
+    nav.toc h2 {
+      margin: 0 0 10px;
+      font-size: 0.95rem;
+    }
+
+    nav.toc ol {
+      margin: 0;
+      padding-left: 1.2em;
+      color: var(--muted);
+    }
+
+    nav.toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    nav.toc a:hover { text-decoration: underline; }
+
+    section {
+      margin-bottom: 42px;
+      scroll-margin-top: 24px;
+    }
+
+    h2 {
+      font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", Georgia, serif;
+      font-size: 1.45rem;
+      margin: 0 0 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h3 {
+      font-size: 1.08rem;
+      margin: 22px 0 8px;
+      color: var(--accent);
+    }
+
+    p { margin: 0 0 12px; }
+
+    ul, ol { margin: 0 0 14px; padding-left: 1.35em; }
+    li { margin-bottom: 6px; }
+
+    .verdict {
+      background: linear-gradient(135deg, #123f36, #0f5c4c);
+      color: #f4fff9;
+      border-radius: 14px;
+      padding: 18px 20px;
+      margin: 0 0 18px;
+      box-shadow: 0 10px 30px rgba(15, 92, 76, 0.18);
+    }
+
+    .verdict strong { color: #fff; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin: 14px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+      margin: 12px 0 18px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      background: #efe9dd;
+      font-weight: 650;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      border-radius: 12px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-size: 0.86rem;
+      line-height: 1.55;
+      margin: 12px 0 16px;
+    }
+
+    code {
+      font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+      font-size: 0.9em;
+    }
+
+    p code, li code, td code {
+      background: #efe9dd;
+      padding: 1px 6px;
+      border-radius: 5px;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+
+    .diagram {
+      font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .note {
+      border-left: 4px solid var(--warn);
+      background: #fff6ea;
+      padding: 12px 14px;
+      margin: 14px 0;
+      border-radius: 0 10px 10px 0;
+      color: #4a3418;
+    }
+
+    footer {
+      margin-top: 48px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media print {
+      body { background: white; }
+      .verdict { box-shadow: none; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div class="eyebrow">Harness Engineering Notes</div>
+      <h1>Runtime Harness 自行开发，Agent 基座作为承载</h1>
+      <p class="lede">
+        把 DeepSeek Harness「万物皆插件」架构，与长程任务场景下
+        「自研 runtime harness + 基座作载体」的调研结论，落地为一份可本地阅读的思考稿。
+      </p>
+      <div class="meta">
+        <span class="chip">DeepSeek Harness / Cordis</span>
+        <span class="chip">Long-horizon Agents</span>
+        <span class="chip">MEA / Ralph / Goal</span>
+        <span class="chip">LongHorizon vs dsh</span>
+        <span class="chip">ARTEX</span>
+        <span class="chip">Web调研补强</span>
+        <span class="chip">本地笔记 · 2026-11-17</span>
+      </div>
+    </header>
+
+    <nav class="toc" aria-label="目录">
+      <h2>目录</h2>
+      <ol>
+        <li><a href="#part1">Part I · DeepSeek Harness 与「万物皆插件」</a></li>
+        <li><a href="#part2">Part II · 自研 Runtime Harness，基座作承载</a></li>
+        <li><a href="#part3">Part III · 六件职责与落地选型</a></li>
+        <li><a href="#part4">Part IV · LongHorizon 与 DeepSeek 插件栈</a></li>
+        <li><a href="#part5">Part V · ARTEX 与 LongHorizon 对照</a></li>
+        <li><a href="#part6">Part VI · 国内外调研与设计补强</a></li>
+        <li><a href="#refs">参考与证据来源</a></li>
+      </ol>
+    </nav>
+
+    <!-- ===================== PART I ===================== -->
+    <section id="part1">
+      <h2>Part I · DeepSeek Harness 与「万物皆插件」</h2>
+
+      <div class="verdict">
+        <strong>结论：</strong>DeepSeek Harness（<code>dsh</code>）是基于 Cordis 的微内核 agent 运行时。
+        内核几乎只有抽象服务 + 一个可替换的循环插件；其余产品能力一律以插件挂载。
+        设计准则是 <strong>everything is a plugin（一切皆插件）</strong>。
+      </div>
+
+      <h3>1.1 总体定位</h3>
+      <table>
+        <thead>
+          <tr><th>层级</th><th>内容</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>运行时底座</td><td>vendored Cordis（loader / hmr / schemastery…）</td></tr>
+          <tr><td>产品内核</td><td><code>packages/core/*</code>：session / tools / agent / agent-loop / system-prompt</td></tr>
+          <tr><td>能力族</td><td><code>llm / fs / shell / mcp / skill…</code>：Definition → Provider → Consumer</td></tr>
+          <tr><td>组装层</td><td><code>packages/bundle/*</code> + profile：web / headless / sdk / acp…</td></tr>
+          <tr><td>应用入口</td><td><code>apps/{cli,web,desktop}</code>，统一经 <code>dsh --profile</code> 启动</td></tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        扩展依赖接口（<code>ctx.agents / ctx.tools / ctx.llm…</code>），禁止依赖具体 loop 实现。
+        包括 <code>dsh-agent-loop</code> 在内也是插件。
+      </div>
+
+      <h3>1.2 Cordis 五要素</h3>
+      <ol>
+        <li><strong>Plugin</strong>：<code>apply(ctx)</code> 函数、带 apply 的对象、或 Service 子类</li>
+        <li><strong>Context</strong>：共享服务仓库，如 <code>ctx.tools / ctx.llm / ctx.sessions</code></li>
+        <li><strong>inject</strong>：用服务依赖表达加载顺序（不是 YAML 行序）</li>
+        <li><strong>Typed Events</strong>：emit / waterfall / parallel / serial / bail</li>
+        <li><strong>可逆 effect</strong>：注册带 disposer，卸载自动撤销</li>
+      </ol>
+      <p>插件不互相 import 实现，只通过 <code>ctx</code> 与事件协作。</p>
+
+      <h3>1.3 启动 = 叠一层插件树</h3>
+      <pre class="diagram"><code>空入口列表
+  → profile 有序 bundles（如 dsh-base → dsh-web-app）
+  → profile 的 cordis.patch.yml
+  → Harness home patch
+  → CLI --patch overlays</code></pre>
+      <ul>
+        <li><strong>profile</strong>：具名组装（web / headless / sdk…）</li>
+        <li><strong>bundle</strong>：Cordis 配置行 + 依赖代码的分发单元</li>
+        <li><strong>patch</strong>：按 id 整行替换或 insert</li>
+      </ul>
+      <p>
+        <code>dsh-base</code> 的 <code>cordis.patch.yml</code> 把 LLM、session、agent、tools、agent-loop、
+        fs/shell/sandbox、插件管理器等全部写成可被上层覆盖的行——这就是「没有特权内核，一切可配置替换」的物理形态。
+      </p>
+
+      <h3>1.4 能力 Seam</h3>
+      <p>一项可替换能力 = 三种角色（可同包，但概念上分离）：</p>
+      <pre class="diagram"><code>Service Definition  →  Service Provider  →  Consumer（常是面向模型的 tool）
+     dsh-shell             dsh-bash-local         dsh-tool-bash
+     ctx.shell             本地执行               inject: ['shell','tools',…]</code></pre>
+      <p>
+        换 Provider（本地 → SSH/远程沙箱）时，Definition 与 tool 不变。
+        同类：<code>ctx.llm</code> 适配器、<code>ctx.fs</code>、<code>ctx.sandbox</code>、MCP、skill、subagent、web-search…
+      </p>
+
+      <h3>1.5 一轮对话控制流</h3>
+      <pre class="diagram"><code>turn/start
+  → 领取输入 → 组装 prompt + tools
+  → agent/pre-step（waterfall：接纳/改写/拒绝）
+  → step/start → prepareCall → llm/stream
+  → tool/call → tools/pre|execute|post → tool/result
+  → 欠请求则下一 step
+  → agent/turn-stopping → turn/end</code></pre>
+      <p>原则：<strong>模型可见即已落日志</strong>；UI / 遥测 / fork / resume 都从 session log 派生。</p>
+
+      <h3>1.6 一句话心智模型</h3>
+      <pre class="diagram"><code>配置树（YAML patches）
+    ↓ Loader 挂载
+插件森林（各自 inject + apply）
+    ↓ 贡献
+ctx.* 服务 + 类型化事件 + 可逆注册
+    ↓ 其中一个插件
+agent-loop 驱动 turn/step
+    ↓ 其它插件
+tools / llm / fs / policy / UI / MCP …</code></pre>
+    </section>
+
+    <!-- ===================== PART II ===================== -->
+    <section id="part2">
+      <h2>Part II · 自研 Runtime Harness，基座作承载</h2>
+
+      <div class="verdict">
+        <strong>结论：</strong>长程任务的瓶颈往往不在「再换一个更强模型」，
+        而在你自己写的 runtime harness 如何管状态、验收与续跑；
+        agent 基座只负责承载单轮 / 短程执行。
+      </div>
+
+      <h3>2.1 这句话在说什么</h3>
+      <p>业界公式几乎统一成：</p>
+      <pre class="diagram"><code>Agent ≈ 基座（认知 + 通用执行） + Harness（业务运行时）</code></pre>
+      <table>
+        <thead>
+          <tr><th>层</th><th>职责</th><th>谁来做</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Agent 基座（carrier）</strong></td>
+            <td>模型调用、工具执行、session/turn、沙箱、基础 UI/SDK</td>
+            <td>Claude Code / Codex / DeepSeek Harness / 自研微内核</td>
+          </tr>
+          <tr>
+            <td><strong>Runtime harness（自研）</strong></td>
+            <td>业务目标分解、跨窗口状态、验收门禁、续跑策略、领域工具与审批</td>
+            <td><strong>你按业务写</strong></td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        「基座作承载」不是再造一个 Claude Code，而是：
+        <strong>把通用执行能力当可插拔引擎，把业务差异收敛到外层 / 旁路 harness。</strong>
+      </p>
+
+      <h3>2.2 为什么长程任务特别吃这一套</h3>
+      <ul>
+        <li>
+          <strong>LongHorizon-Harness</strong>：同一骨干模型上，MEA 外环把 WeaveBench
+          从 51.8% 提到 80.7%；可挂 Claude Code / Codex 等现成基座作 executor。
+        </li>
+        <li>
+          <strong>Anthropic</strong>：长程失败主因是跨 context 失忆、一次做太多、提前宣布完成、脏现场。
+          靠 initializer + progress/feature 清单 + 每 session 只推进一点来修。
+        </li>
+        <li>
+          <strong>Harness 消融研究</strong>：planning / action space / context 管理各自作用不同；
+          弱模型更吃规划与工具约束，强模型更吃成本与上下文预算。
+        </li>
+      </ul>
+      <p>长程三难：<strong>目标漂移、context rot、任务状态丢失</strong>——几乎全是 runtime 问题，不是下一 token 问题。</p>
+
+      <h3>2.3 业界常见实现形态（由薄到厚）</h3>
+
+      <div class="card">
+        <h3 style="margin-top:0">A. 薄外环 + 厚基座（最快落地）</h3>
+        <p>基座不动；外层只加「续跑契约」。</p>
+        <ul>
+          <li><strong>Ralph</strong>：同一 prompt 反复喂；进度落在文件/git；Stop hook 或子 agent 轮次阻止提前退出。</li>
+          <li><strong>Anthropic long-running</strong>：首 session 写 feature_list / progress / init.sh；之后每 session 读 git+进度、只做一个 feature、测完再标 passes、干净提交。</li>
+        </ul>
+        <p>业务适配点：验收标准、进度 schema、允许改哪些文件、何时算 done。</p>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">B. MEA 外环 + 现成 agent 作 executor</h3>
+        <pre class="diagram"><code>Manager（持有任务状态，不碰环境）
+  → 发子任务合同（目标/验收/边界）
+Executor（Claude Code / Codex / dsh agent… 全新上下文执行）
+  → 改环境
+Auditor（只读验环境）
+  → 认证事实写回任务状态</code></pre>
+        <p>
+          要点：<strong>执行轨迹可扔；只有审计过的任务状态跨轮持久化。</strong>
+          AgentAdapter 让基座可换，不改其原生 loop。
+          这正是「runtime 自研、基座作承载」的教科书结构。
+        </p>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">C. 可组合基座上挂业务插件（DeepSeek 路线）</h3>
+        <p>基座提供 <code>ctx.agents / tools / sessions / llm…</code>；业务 harness 以插件/bundle/profile 出现：</p>
+        <table>
+          <thead>
+            <tr><th>业务诉求</th><th>挂接点</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>同会话长目标</td><td><code>goal</code>（phase、round 上限、blocked 原因）</td></tr>
+            <tr><td>跨轮全新 agent</td><td><code>tool-ralph</code>（不可变目标 + 有界报告 + 共享工作区）</td></tr>
+            <tr><td>领域编排</td><td><code>workflow</code> + subagent</td></tr>
+            <tr><td>定时续跑</td><td><code>schedule</code></td></tr>
+            <tr><td>领域工具/审批/沙箱</td><td>Definition–Provider–Consumer seam</td></tr>
+          </tbody>
+        </table>
+        <p>循环仍是通用 <code>agent-loop</code>；业务差异不进内核，进配置树与插件。</p>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">D. 全自研 harness（成本最高）</h3>
+        <p>
+          从 observation / context / control / action / state / verification 六件套自己造。
+          适合强合规、强领域协议；多数团队应先 C/B，只把「不可换」的部分下沉。
+        </p>
+      </div>
+
+      <h3>2.4 分层总览图</h3>
+      <pre class="diagram"><code>┌─────────────────────────────────────────────┐
+│  业务 Runtime Harness（你开发）               │
+│  目标分解 · 任务状态 · 验收 · 续跑 · 审批    │
+│  MEA / Ralph / goal-round / 领域工作流        │
+└───────────────┬─────────────────────────────┘
+                │ Adapter / 插件 / subagent
+┌───────────────▼─────────────────────────────┐
+│  Agent 基座（承载）                          │
+│  LLM · tools · session · sandbox · UI/SDK    │
+│  Claude Code / Codex / DeepSeek Harness …   │
+└───────────────┬─────────────────────────────┘
+                │
+┌───────────────▼─────────────────────────────┐
+│  业务环境：代码仓 · ERP · 浏览器 · 工单系统  │
+└─────────────────────────────────────────────┘</code></pre>
+    </section>
+
+    <!-- ===================== PART III ===================== -->
+    <section id="part3">
+      <h2>Part III · 六件职责与落地选型</h2>
+
+      <h3>3.1 Runtime Harness 的六件职责</h3>
+      <ol>
+        <li><strong>Observation</strong> — 业务能看见什么（票据/DB/工单/浏览器，而不是裸 bash）</li>
+        <li><strong>Context</strong> — 每轮塞什么；旧轨迹如何压缩/丢弃</li>
+        <li><strong>Control</strong> — 谁决定下一子任务：单 loop / MEA / Ralph / goal-round</li>
+        <li><strong>Action</strong> — 工具面与权限（窄工具常比万能 bash 更稳）</li>
+        <li><strong>State</strong> — 任务状态放在上下文外：JSONL / goal / progress / 看板</li>
+        <li><strong>Verification</strong> — 独立验收：测试、审计 agent、业务规则引擎</li>
+      </ol>
+
+      <h3>3.2 长程适配业务的关键操作</h3>
+      <ol>
+        <li><strong>状态外置</strong>：不要让模型在同一上下文里既干活又当裁判。</li>
+        <li><strong>短执行、长记忆</strong>：executor 可 fresh；记忆是审计过的状态 + 工件。</li>
+        <li><strong>合同化子任务</strong>：每轮有验收标准；未审计「完成」不得写入正式状态。</li>
+        <li><strong>基座可替换</strong>：业务环只依赖 Adapter（<code>run(subtask) → artifacts</code>）。</li>
+        <li><strong>完成条件可机器判定</strong>：测试、字段校验、页面断言；忌纯「模型自评 done」。</li>
+        <li><strong>干净交接</strong>：每轮结束留下下一位 agent 能快速读懂的 progress + 可恢复 git/工件。</li>
+      </ol>
+
+      <h3>3.3 映射到 DeepSeek Harness</h3>
+      <pre class="diagram"><code>agent 基座（Cordis + core + agent-loop）
+        ↑ 承载
+业务 runtime harness = profile/bundle/patch
+  + 领域 tools/providers
+  + goal / ralph / workflow / schedule
+  + 业务验收与审批插件</code></pre>
+
+      <h3>3.4 实践选型</h3>
+      <table>
+        <thead>
+          <tr><th>场景</th><th>建议</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>明确验收、可迭代改代码/文件</td>
+            <td>薄外环：Ralph / Anthropic progress 模式</td>
+          </tr>
+          <tr>
+            <td>跨系统、易撒谎完成、需强证据</td>
+            <td>MEA：Manager + fresh Executor + 只读 Auditor</td>
+          </tr>
+          <tr>
+            <td>要产品化、多入口（Web/SDK/定时）</td>
+            <td>可组合基座（如 DSH）+ 业务 bundle</td>
+          </tr>
+          <tr>
+            <td>强合规、工具协议极定制</td>
+            <td>自研六件套，基座只留模型与最小执行</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <strong>反模式：</strong>把业务状态全塞进一份越聊越长的 transcript；
+        让执行 agent 自己标 done；为每个业务 fork 一整份 agent 产品而不是挂 harness。
+      </div>
+
+      <div class="verdict">
+        <strong>一句话：</strong>自研的是「如何把长任务拆成可审计状态转移」的 runtime；
+        基座只是可替换的执行载体。
+        长程适配业务 = 外置状态 + 短上下文执行 + 独立验收 + 干净续跑，而不是改模型权重。
+      </div>
+    </section>
+
+    <!-- ===================== REFS ===================== -->
+    <section id="part4">
+      <h2>Part IV · LongHorizon 与 DeepSeek 插件栈</h2>
+
+      <div class="verdict">
+        <strong>结论：</strong>两条路不在同一层。LongHorizon 是任务状态外环；DeepSeek 插件 / bundle / profile 是可替换的 agent 产品基座。长程业务通常两边的职责都要，但不必两边都从零写。
+      </div>
+
+      <h3>4.1 理解校准</h3>
+      <p>可以把它看成凌驾在 agent harness 之上、靠调用 agent 推进任务的外环。固定的是三种角色，不是一群长期存活、各自保存完成状态的专职 agent。</p>
+      <ul>
+        <li>它不改 Claude Code / Codex / dsh 的原生 loop，经 AgentAdapter 调用它们。</li>
+        <li>Manager 持有任务状态且不碰环境；Executor 每轮全新上下文，轨迹用完即弃；Auditor 只读检查环境。</li>
+        <li>持久化的是任务状态：需求、产物、事实，以及 completed / pending / blocked / untrusted。完成只能由 Auditor 对<strong>环境</strong>的核查写入。执行 agent 自己说做完了不算。</li>
+        <li>调用 agent 只是 Execute 这一步。长程能力来自把「谁在干活」和「什么算做完」拆开。</li>
+      </ul>
+      <pre class="diagram"><code>Manager（持有任务状态，不碰环境）
+  → 子任务合同
+Executor（全新上下文，唯一可改环境）
+  → 环境变化
+Auditor（只读核查同一环境）
+  → 审计事实写回任务状态
+  → 下一轮 Manager</code></pre>
+
+      <h3>4.2 LongHorizon-Harness 的优势</h3>
+      <ul>
+        <li>长程三难被结构拆开：目标漂移靠合同与原目标对照，context rot 靠丢弃执行轨迹，状态丢失靠外置任务记录。</li>
+        <li>基座可换。业务环只依赖 <code>run(contract) → report</code>，不绑死一家 CLI。</li>
+        <li>控制权在部署方脚本，不在模型。模型不能改循环、路由或验收规则。</li>
+        <li>论文侧有跨基准增益（同一骨干下 WeaveBench 51.8% 到 80.7% 等），说明外环本身有独立价值。</li>
+        <li>适合跨系统、容易谎报完成、必须用环境证据的任务。</li>
+      </ul>
+
+      <h3>4.3 LongHorizon-Harness 的劣势</h3>
+      <ul>
+        <li>它是研究型外环，不是产品基座。会话产品、凭据、审批、沙箱、Web/SDK、插件市场都要自己接，或继续依赖所挂的 CLI。</li>
+        <li>质量瓶颈在 Auditor。环境不可观测、验收含糊、只读工具不够时，外环会把错误状态写死。</li>
+        <li>Manager 看不到现场，合同写错会让 Executor 空转；每轮全新上下文更费 token，短任务不划算。</li>
+        <li>Adapter 要跟着 Claude Code / Codex 的 CLI 与权限模型变。</li>
+        <li>浏览器、定时、人在环审批不是它的交付形态，需要再包一层。</li>
+      </ul>
+
+      <h3>4.4 DeepSeek 插件 / bundle / profile 的优势</h3>
+      <p>基座已有 append-only session、工具流水线、<code>agent/pre-step</code>、沙箱与审批，以及 Web / headless / sdk / acp。业务差异用叠层表达，不必 fork 循环。</p>
+      <ul>
+        <li><strong>插件</strong>：领域工具、策略、验收服务，走 <code>inject</code> 与可逆注册。能力按 Definition / Provider / Consumer 拆开。</li>
+        <li><strong>bundle</strong>：可分发的 <code>cordis.patch.yml</code>，插入一组行，上层按 id 整行替换。</li>
+        <li><strong>profile</strong>：<code>web</code> / <code>sdk</code> 等具名组装。树外包用 <code>dsh plugin --profile &lt;name&gt; add</code> 装入，不必改发行版内核。</li>
+        <li>相邻件已经存在：同会话长目标用 <code>goal</code>；全新子 agent 与有界交接用 <code>tool-ralph</code>；编排用 <code>workflow</code>；定时用 <code>schedule</code>。</li>
+        <li>同一业务层可以同时出现在 Web、SDK、headless。人在环、权限、日志回放、取消沿用基座。</li>
+      </ul>
+
+      <h3>4.5 DeepSeek 路线的劣势</h3>
+      <ul>
+        <li>默认是一条会增长的 session。<code>goal</code> 留在同会话，压缩不能替代外置任务状态。</li>
+        <li><code>ralph</code> 不做独立审计。它是新鲜执行加有界交接，不是 MEA。</li>
+        <li>长程环若只做成普通工具，模型可以不调用它。控制权要放在部署方固定脚本或启动器外环。</li>
+        <li>插件开发成本高：包拓扑、schema、README、locale、覆盖率门禁。预览期 API 会破坏兼容。</li>
+        <li>插件挂在 dsh 的 <code>ctx</code> 上。换掉整个执行基座，就用不上这套插件收益。</li>
+      </ul>
+
+      <h3>4.6 能否接入任何 agent</h3>
+      <div class="verdict">
+        <strong>不能接任意 agent。</strong>能接的是满足 AgentAdapter 契约的执行后端。论文中的例子是 Claude Code、Codex CLI、OpenClaw、Hermes。三种角色可以换模型和 harness，原生 loop 保持不动。
+      </div>
+      <ul>
+        <li>能在有界预算内跑完一份子任务合同，并返回结构化执行报告。</li>
+        <li>Executor 使用全新上下文，不继承父会话，并能按合同改环境。</li>
+        <li>Auditor 只能只读检查同一环境。</li>
+        <li>Manager 不直接拿环境工具，只产出 execute / done / blocked / ask 和下一份合同。</li>
+        <li>能取消、能限制轮次，交接内容有大小上限。</li>
+      </ul>
+      <div class="note">纯聊天、无法隔离上下文、或不能把「完成」交给外部检查的 agent，接上也不会变成长程系统。</div>
+
+      <h3>4.7 DeepSeek 给 LongHorizon 的加成</h3>
+      <p>加成发生在每一轮 Execute / Audit 里面，不替代外环的任务状态。对应长程复杂业务：</p>
+      <ul>
+        <li><strong>业务动作面。</strong>用 profile 挂上 ERP/MCP、文件系统、浏览器、Office，而不是把一轮合同丢给裸 bash。Auditor 走同一套只读能力查现场。</li>
+        <li><strong>权限与沙箱。</strong>付款、生产写、越权命令由审批和 sandbox 挡在工具执行前。外环的 ask 只决定要不要问人，挡不住这一轮内部的危险调用。</li>
+        <li><strong>可核对现场。</strong>session 日志、带 schema 的工具结果、附件和工作区文件，给 Auditor 当环境证据。完成仍以环境为准。</li>
+        <li><strong>干净的新上下文。</strong>子 agent 可以要求 <code>inheritsParentContext: false</code>，父对话不会漏进下一轮。</li>
+        <li><strong>多入口承载。</strong>headless/sdk 进程充当被调用的 Executor；定时调度唤醒下一轮 Manager。</li>
+        <li><strong>执行世界可换。</strong>文件系统和子进程指向同一远程沙箱时，命令行、终端和语言服务一起搬走，合同不用按机器重写。</li>
+      </ul>
+      <div class="note"><code>goal</code> 和 <code>ralph</code> 不能算这层加成。它们没有独立的环境审计，放进 LongHorizon 里会和任务状态抢「谁说了算」。</div>
+
+      <h3>4.8 怎么选</h3>
+      <table>
+        <thead>
+          <tr><th>场景</th><th>建议</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>把现有编码 CLI 变成可审计的长任务状态机，短期不需要自有产品壳</td>
+            <td>用 LongHorizon 式外环，dsh 或 Claude Code 只当 Executor</td>
+          </tr>
+          <tr>
+            <td>做成自己的多入口 agent 产品，长程只是其中一种工作模式</td>
+            <td>用 dsh 的 profile/bundle，把业务工具和策略做成插件</td>
+          </tr>
+          <tr>
+            <td>两者都要</td>
+            <td>dsh 当 Executor 与产品壳；外环照抄 MEA。现成 goal / ralph 不等于 LongHorizon</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="part5">
+      <h2>Part V · ARTEX 与 LongHorizon 对照</h2>
+
+      <div class="verdict">
+        <strong>结论：</strong>思路同属「外环拆角色、状态放在执行轨迹外面」，但不是同一套设计。
+        ARTEX 没有 LongHorizon 那种独立只读审计；它的创新在渗透测试场景里的双图、并发前沿队列，以及「没写回图就不算做完」。
+      </div>
+
+      <div class="note">
+        依据公开源码注释与包文档（<code>agent</code> 包、<code>tools.go</code>、Planner / Worker / MainAgent 说明）。
+        仓库根 README 曾拉取失败，架构长文 <code>docs/ARTEX-架构设计.md</code> 未逐段核对。项目：
+        <a href="https://github.com/BaaRai/ARTEX">github.com/BaaRai/ARTEX</a>。
+      </div>
+
+      <h3>5.1 一致的部分</h3>
+      <p>两边都拒绝「一个 agent 一路聊到任务结束」：</p>
+      <table>
+        <thead>
+          <tr><th>共同想法</th><th>LongHorizon</th><th>ARTEX</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>规划与执行分开</td>
+            <td>Manager 发合同，Executor 只做这一份</td>
+            <td>Planner 是唯一意图生成者，Worker 只领一条 intent</td>
+          </tr>
+          <tr>
+            <td>一次只做一块</td>
+            <td>一轮一个有界子任务</td>
+            <td>一个 Worker 只 claim 一条 frontier intent，做完就退出</td>
+          </tr>
+          <tr>
+            <td>跨轮记忆不靠聊天记录</td>
+            <td>任务状态 + 审计报告</td>
+            <td>PostgreSQL 里的资产图 + 探索图</td>
+          </tr>
+          <tr>
+            <td>说完了不等于做完</td>
+            <td>执行报告不能直接标完成</td>
+            <td><code>WriteCounts.Total()==0</code> 表示探过但没落库，不当成完成；结束原因区分 completed 与 max_turns</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        人也不在自主循环里。LongHorizon 的 Manager 可以 <code>ask</code>。
+        ARTEX 的 MainAgent 只观察、注入 hint 或高优先级 intent，自主发牌仍是 Planner 的事。
+      </p>
+
+      <h3>5.2 不一致的部分</h3>
+      <p>
+        LongHorizon 的关键是 <strong>Manage → Execute → Audit</strong>：
+        Auditor 只读检查环境，只有审计事实能改任务状态，执行者的自述不能标完成。
+        每一轮执行上下文用完即弃，下一轮只看见压缩后的已验证状态。
+      </p>
+      <p>
+        ARTEX 的闭环是 <strong>Planner → 并发 Worker → 工人自己把 fact / asset / finding 写回图 → 图变化再叫醒 Planner</strong>。
+        Planner 读这张图判断目标是否达成。没有一个不能改环境、也不能采信工人报告的独立审计角色。
+        工人调用 <code>report_finding</code> 就会把发现写进探索图，并可以中途唤醒 Planner。
+      </p>
+      <pre class="diagram"><code>LongHorizon:
+  Manager → Executor（改环境）→ Auditor（只读）→ 任务状态
+
+ARTEX:
+  Planner → 并发 Workers（改环境并写图）→ 双图状态 → 再叫醒 Planner
+  MainAgent 只注入 hint / 高优先级 intent，不替代 Planner</code></pre>
+      <ul>
+        <li><strong>顺序一轮 vs 并发前沿。</strong>LongHorizon 一轮一个 Executor。ARTEX 多个 Worker 同时领不同 intent。</li>
+        <li><strong>通用外环 vs 渗透专用运行时。</strong>LongHorizon 用 Adapter 套 Claude Code、Codex 等。ARTEX 自己接 LLM，工具是 Kali、流量录制代理、域名解析和站点探测。</li>
+        <li><strong>紧凑任务状态 vs 不断长大的双图。</strong>LongHorizon 丢掉执行轨迹。ARTEX 保留 transcript，并用 Compactor 压缩；权威记忆是图，不是一份短的审计记录。</li>
+      </ul>
+      <div class="note">
+        角色拆分和「状态外置」一致；「完成必须由独立环境审计写入」这一条不一致。
+        ARTEX 更接近「规划器 + 工人写共享世界模型」，工人既是执行者，也是事实的写入者。
+      </div>
+
+      <h3>5.3 相对 LongHorizon 的新意</h3>
+      <p>这些是针对渗透测试长程探索的设计，不是把 MEA 换了个名字：</p>
+      <ol>
+        <li>
+          <strong>双图世界模型。</strong>
+          资产图回答「目标上有什么」；探索图回答「试过什么、从哪来、产出了什么」。
+          intent 带 parents 和 yields，Planner 看到的是谱系，不只是一条状态摘要。
+        </li>
+        <li>
+          <strong>前沿队列。</strong>
+          开放 intent 按优先级领取，多个 Worker 并行。图一变就触发下一轮规划，不必等整轮审计结束。
+        </li>
+        <li>
+          <strong>停滞指纹。</strong>
+          把 intent 摘要归一化后，同一方向重复多次且自第一次尝试以来没有新 finding，就判定在空转。
+          用来截断「同一形状的攻击反复磨」。
+        </li>
+        <li>
+          <strong>结算门。</strong>
+          Worker 退出前进入强制结算，并关掉破坏性工具。墙钟超时、取消、写回计数分开处理。
+          探索过但 <code>Facts + Assets + Findings == 0</code> 不能当成进展。
+        </li>
+        <li>
+          <strong>环境侧富化。</strong>
+          流量走录制代理；发现域名或站点后触发解析和探测，把环境观察写进资产图。
+          这比纯模型自述更靠近现场，但写回仍由 Worker 路径发起，不是独立 Auditor。
+        </li>
+        <li>
+          <strong>人的干预面很窄。</strong>
+          MainAgent 可以读图、给 Planner 提示、或直接塞一条高优先级 intent，也可以中途 steer / kill 某个 Worker。
+          人改的是队列，不是替换 Planner。
+        </li>
+      </ol>
+
+      <h3>5.4 怎么用这个判断</h3>
+      <table>
+        <thead>
+          <tr><th>业务诉求</th><th>判断</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>执行者不能给自己盖章</td>
+            <td>ARTEX 还没做到；要另加只读审计，并禁止 <code>report_finding</code> 直接改完成状态</td>
+          </tr>
+          <tr>
+            <td>未知攻击面、多线索并行、试错方向会重复</td>
+            <td>ARTEX 的双图、前沿队列和停滞检测比 LongHorizon 的单线合同更贴切</td>
+          </tr>
+          <tr>
+            <td>需要强验收可信</td>
+            <td>LongHorizon 的独立 Auditor 更合适</td>
+          </tr>
+          <tr>
+            <td>需要探索调度与领域世界模型</td>
+            <td>ARTEX 更强；可把其双图 / 前沿思路接到 MEA 外环，而不是互相替换</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="part6">
+      <h2>Part VI · 国内外调研与设计补强</h2>
+
+      <div class="verdict">
+        <strong>结论：</strong>当前「MEA 外环 + DeepSeek 基座 + ARTEX 探索调度」方向成立。
+        Web 调研显示，行业共识已从「让模型多干一会儿」转向「外置状态、独立验收、可回放证据」。
+        可补强点主要是：任务状态与产物分离、提交门、多层验证、项目工作简报、权威系统读回，以及把业务策略写成可编辑 harness 文档。
+      </div>
+
+      <h3>6.1 国际：围绕 LongHorizon 的知识簇</h3>
+      <table>
+        <thead>
+          <tr><th>来源</th><th>核心思想</th><th>对当前设计的含义</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>LongHorizon-Harness / MEA</strong></td>
+            <td>任务状态外置；仅审计事实可写状态；Executor 全新上下文后丢弃轨迹；角色是循环内职责边界，不是三套独立记忆</td>
+            <td>已采纳。官方补充：被拒结果仍是证据不是进展；<code>done</code> 需 Manager 判定且审计干净</td>
+          </tr>
+          <tr>
+            <td><strong>StateHarness</strong></td>
+            <td>维护演化中的项目状态：问题/假设、发现与决策、仓库关系、未完成项；另开诊断会话复盘遗漏</td>
+            <td>任务状态之外再加「项目工作简报」。编码类长程可降低成本；与 MEA 互补而非替代</td>
+          </tr>
+          <tr>
+            <td><strong>VeriHarness</strong></td>
+            <td>把验证做成 agentic：工作区 + 证据工具 + 可复用验证技能；分歧消解器 vs 共识挑战者</td>
+            <td>Auditor 不应只做 checklist。要能反驳「大家都说对了」和「两套说法打架」</td>
+          </tr>
+          <tr>
+            <td><strong>Rethinking Verification</strong></td>
+            <td>验证分四层：初始指令、中途提醒、完成门、独立评审；独立评审性价比最高</td>
+            <td>不要把所有验证压到回合末。合同内提醒 + 提交门 + 独立审计分层部署</td>
+          </tr>
+          <tr>
+            <td><strong>AI Harness Engineering</strong></td>
+            <td>模型–harness–环境系统；十一项职责含失败归因、熵审计、干预记录</td>
+            <td>产品化时补：为什么失败、何时干预、现场是否失控，不能只记成功路径</td>
+          </tr>
+          <tr>
+            <td><strong>Anthropic long-running</strong></td>
+            <td>Initializer 写不可删改的 feature_list；每 session 只做一个 feature；git + progress；新工作前回归已通过项</td>
+            <td>需求清单应不可被执行者删改，只能翻转验收位；每轮开工先验回归</td>
+          </tr>
+          <tr>
+            <td><strong>NLAH + IHR</strong></td>
+            <td>把角色、阶段、状态规则、验证与停机条件写成可编辑自然语言 harness 文档，由薄 runtime 解释执行</td>
+            <td>业务差异尽量进策略文档，不要硬编码进 Manager 脚本</td>
+          </tr>
+          <tr>
+            <td><strong>Meta-Harness</strong></td>
+            <td>用编码 agent 根据分数与原始执行轨迹搜索/改写 harness 代码</td>
+            <td>外环本身可迭代优化；保存完整轨迹与评分，供后续改合同/审计策略</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>6.2 国内：协作治理与 DSH 生态</h3>
+      <ul>
+        <li>
+          <strong>阿里云 AI Agent Handbook：</strong>
+          协作应拆成 <code>Task State</code>（目标、责任、依赖、进度、验收）与 <code>Artifact</code>（报告、代码、数据、测试结果）。
+          成员退出后仍能靠状态与产物续跑，减少自然语言转述损失。
+        </li>
+        <li>
+          <strong>生产级多智能体系统：</strong>
+          多 Agent 首先是控制权、责任、状态和故障边界的设计。
+          会话视图只是投影；策略决策与审批应是独立状态机；关键事实用仅追加事件账本，Agent 不可改写。
+        </li>
+        <li>
+          <strong>ToWow Agent-to-Agent Harness：</strong>
+          协议负责连接，Harness 负责治理。最小证据循环：
+          定义任务 → Context Capsule → 执行留痕 → Commit Gate → 权威系统读回 Effect → 独立验收。
+          「工具自报成功」不等于「目标端已生效」。
+        </li>
+        <li>
+          <strong>DeepSeek / 36氪解读：</strong>
+          DSH 把小事直做、大事 Goal、委派 Subagent、并行 Workflow、Ralph 失忆迭代分成不同模式。
+          社区插件 <code>long-horizon-runtime</code> 强调计划确认、进度跟踪与中断恢复——补的是产品壳，仍不等于独立环境审计。
+        </li>
+        <li>
+          <strong>ARTEX（国内渗透实践）：</strong>
+          双图 + 前沿并发 + 停滞指纹，强在探索调度；缺独立 Auditor，工人可写 finding。见 Part V。
+        </li>
+      </ul>
+
+      <h3>6.3 行业共识（可写成不变量）</h3>
+      <ol>
+        <li>消息不等于状态；聊天记录不是权威任务状态。</li>
+        <li>执行自报不等于完成；完成只能来自环境或权威系统读回。</li>
+        <li>局部绿灯不等于整体交付；需要 Commit Gate / 独立评审。</li>
+        <li>跨轮只应传递压缩后的可靠信息（合同 / Capsule / 审计报告），不是整段 transcript。</li>
+        <li>Harness 约束承诺与证据边界，不约束推理路径；探索可以自由，交付必须过门。</li>
+        <li>角色是职责边界，不是多套互相漂移的长期记忆。</li>
+      </ol>
+
+      <h3>6.4 对当前设计的具体补强</h3>
+      <p>对照已有 Part I–V（MEA 外环、DSH 基座、ARTEX 对照），建议补强如下：</p>
+
+      <div class="card">
+        <h3 style="margin-top:0">A. 状态模型升级</h3>
+        <ul>
+          <li>把单一「任务状态」拆成：<strong>Task State</strong>（需求/进度/阻塞）+ <strong>Artifacts</strong>（可引用产物）+ 可选 <strong>Working Brief</strong>（项目假设、仓库关系、未完成债，来自 StateHarness）。</li>
+          <li>记录状态四值保持：completed / pending / blocked / untrusted；被拒审计进入 evidence，不进 completed。</li>
+          <li>需求清单仿 Anthropic：初始化后不可删改描述，只能翻转验收位。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">B. 验证栈分层（补强 Auditor）</h3>
+        <pre class="diagram"><code>L0 合同内初始指令与验收标准
+L1 执行中途提醒 / 预算与停滞检测（可借 ARTEX 指纹）
+L2 Commit Gate：所有权、测试、影响范围、回滚点
+L3 独立 Auditor：只读环境 + 权威系统 Effect 读回
+可选 L3+ VeriHarness：分歧消解 + 共识挑战 + 验证技能库</code></pre>
+        <p>MEA 的 Audit 对应 L3；不要指望一轮 Auditor 覆盖全部验证负担。</p>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">C. 交接与写入门</h3>
+        <ul>
+          <li>Executor 入场只带 <strong>Context Capsule</strong>：目标、边界、依赖、完成标准、相关审计引用。</li>
+          <li>写回共享状态前过 <strong>Commit Gate</strong>；未过门的探索结果不得进入 Task State。</li>
+          <li>业务系统（ERP/工单/DB）以 <strong>Effect 读回</strong>为准，不以工具返回值或模型自述为准。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">D. 与 DeepSeek / ARTEX 的组合方式</h3>
+        <ul>
+          <li>DSH 继续提供动作面、沙箱、审批、session 证据、多入口与 fresh child。</li>
+          <li>外环仍用 MEA；不要用 <code>goal</code> / <code>ralph</code> / 社区 long-horizon-runtime 替代独立审计。</li>
+          <li>探索型业务可吸收 ARTEX：双图或前沿队列作 <strong>调度层</strong>，但仍要 L3 Auditor 才能标完成。</li>
+          <li>业务策略可用 NLAH 风格文档描述角色/停机/验收，由固定 runtime 解释；机制层留在 Cordis 插件与 Adapter。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">E. 可观测与可进化</h3>
+        <ul>
+          <li>追加式 EventLog：谁、在什么 Capsule 下、做了什么、产物是什么、验收结论是什么。</li>
+          <li>失败归因、干预记录、熵/失控审计进入产品指标，而不只看成功率。</li>
+          <li>保留完整轨迹与评分，供 Meta-Harness 式外环优化（合同模板、审计技能、停滞阈值）。</li>
+        </ul>
+      </div>
+
+      <h3>6.5 建议的增强版闭环</h3>
+      <pre class="diagram"><code>Initializer
+  → 不可变需求清单 + 空 Task State + 工作简报骨架
+Manage
+  → 选下一子目标，生成 Context Capsule / 合同
+Execute（DSH / Claude Code / …，可并发于探索业务）
+  → 改环境；关键动作进 EventLog
+Commit Gate
+  → 未通过则留在证据区，不写正式状态
+Audit / Effect 读回（独立、只读）
+  → 更新 Task State + Artifacts + Working Brief
+停滞 / 分歧 / 共识挑战
+  → 触发重规划或诊断会话
+done | blocked | ask | execute 下一轮</code></pre>
+
+      <div class="note">
+        补强后的系统仍是「runtime harness 自研、agent 基座承载」。
+        变化是：外环从「三角色 MEA」扩成「状态三分 + 多层验证 + 提交门 + 权威读回」；
+        基座仍负责执行与环境能力，不负责宣布完成。
+      </div>
+    </section>
+
+    <section id="refs">
+      <h2>参考与证据来源</h2>
+      <ul>
+        <li>DeepSeek Harness：<code>docs/architecture(.zh).md</code>、<code>docs/cordis-primer.md</code>、<code>packages/bundle/base/cordis.patch.yml</code></li>
+        <li>DSH 长程相关：<code>packages/goal</code>、<code>packages/experimental/tool-ralph</code>、<code>packages/workflow</code></li>
+        <li>社区：<a href="https://github.com/ynymhrb/long-horizon-runtime">ynymhrb/long-horizon-runtime</a>（计划确认 / 跟踪 / 恢复，非独立审计）</li>
+        <li>LongHorizon-Harness（MEA）：<a href="https://arxiv.org/html/2608.01964">arXiv</a> / <a href="https://github.com/AMAP-ML/LongHorizon-Harness">AMAP-ML</a> / <a href="https://lh-harness.pages.dev/">项目页</a></li>
+        <li>StateHarness：arXiv 2610.17616 — 演化项目状态与诊断会话</li>
+        <li>VeriHarness：arXiv/html 2610.00972 — agentic 验证、分歧与共识挑战</li>
+        <li>Rethinking Verification in Agent Harnesses：arXiv 2610.34577 — 四层验证与独立评审性价比</li>
+        <li>AI Harness Engineering：arXiv/html 2605.13357 — 十一项 runtime 职责</li>
+        <li>Anthropic：Effective harnesses for long-running agents；claude-quickstarts/autonomous-coding</li>
+        <li>NLAH：Natural-Language Agent Harnesses（arXiv/html 2603.25723）；Meta-Harness（arXiv/html 2603.28052）</li>
+        <li>国内：阿里云 AI Agent Handbook 第 11 章；生产级多智能体系统第 3 章；ToWow Agent-to-Agent Harness；36氪 DSH 解读</li>
+        <li>Ralph Loop：Claude Code Stop hook / fresh-agent 迭代</li>
+        <li>ARTEX：<a href="https://github.com/BaaRai/ARTEX">github.com/BaaRai/ARTEX</a> — Planner / Worker / MainAgent、双图、frontier、WriteCounts、停滞检测</li>
+      </ul>
+    </section>
+
+    <footer>
+      本地笔记文件：<code>d:\file_work\harness_dev\runtime-harness-thinking.html</code><br />
+      由对话调研整理，可直接用浏览器打开；打印时保留表格与代码块排版。
+    </footer>
+  </div>
+</body>
+</html>
