@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARTEX 架构分析</title>
+<style>
+  :root {
+    --ink: #1c2333;
+    --ink-soft: #4a5468;
+    --ink-faint: #7a8499;
+    --accent: #b3382c;
+    --accent-deep: #8f2b21;
+    --accent-soft: #fdf0ee;
+    --accent-border: #ecc7c1;
+    --bg: #f8f7f5;
+    --card: #ffffff;
+    --line: #e6e2dd;
+    --code-bg: #f2efe9;
+    --good: #0c7a4d;
+    --good-bg: #ecfaf2;
+    --warn: #9a4b00;
+    --warn-bg: #fdf3e7;
+    --mono: "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    font-size: 15.5px;
+    line-height: 1.75;
+  }
+  .page { max-width: 1080px; margin: 0 auto; padding: 0 24px 80px; }
+
+  header.hero {
+    background: linear-gradient(135deg, #3d120c 0%, #8f2b21 55%, #c4483a 100%);
+    color: #fff;
+    padding: 52px 24px 44px;
+    margin-bottom: 36px;
+  }
+  .hero-inner { max-width: 1080px; margin: 0 auto; }
+  .hero .kicker {
+    display: inline-block;
+    font-size: 13px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    background: rgba(255,255,255,.14);
+    border: 1px solid rgba(255,255,255,.28);
+    border-radius: 999px;
+    padding: 4px 14px;
+    margin-bottom: 18px;
+  }
+  .hero h1 { margin: 0 0 10px; font-size: 34px; line-height: 1.3; font-weight: 700; }
+  .hero .sub { font-size: 16.5px; color: rgba(255,255,255,.9); max-width: 800px; }
+  .hero .meta {
+    margin-top: 26px;
+    display: flex; flex-wrap: wrap; gap: 10px;
+    font-size: 13px;
+  }
+  .hero .meta span {
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.25);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-family: var(--mono);
+  }
+
+  nav.toc {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 24px;
+    margin-bottom: 36px;
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    font-size: 14px;
+  }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  nav.toc b { width: 100%; color: var(--ink-faint); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; }
+
+  section { margin-bottom: 44px; }
+  h2 {
+    font-size: 24px;
+    margin: 0 0 6px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--line);
+    font-weight: 700;
+  }
+  h2 .no { color: var(--accent); margin-right: 10px; font-family: var(--mono); font-size: 20px; }
+  h3 { font-size: 17.5px; margin: 26px 0 8px; font-weight: 700; }
+  p { margin: 10px 0; color: var(--ink-soft); }
+  p strong, li strong { color: var(--ink); }
+  ul, ol { color: var(--ink-soft); padding-left: 24px; margin: 8px 0; }
+  li { margin: 5px 0; }
+
+  code {
+    font-family: var(--mono);
+    font-size: .86em;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: #5c3128;
+    word-break: break-all;
+  }
+  .fileref { font-family: var(--mono); font-size: .82em; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-border); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+  pre {
+    background: #221612;
+    color: #f3ddD6;
+    border-radius: 10px;
+    padding: 18px 20px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    border: 1px solid #3c261f;
+  }
+  pre .c { color: #a98d80; }
+  pre .g { color: #9be3b4; }
+  pre .y { color: #ffd479; }
+  pre .b { color: #ffb59e; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 22px 26px;
+    margin: 16px 0;
+    box-shadow: 0 1px 2px rgba(28,35,51,.04);
+  }
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 0 10px 10px 0;
+    padding: 14px 20px;
+    margin: 18px 0;
+    color: var(--ink-soft);
+  }
+  .callout b { color: var(--ink); }
+
+  /* 分层架构图 */
+  .layerdiagram { display: flex; flex-direction: column; gap: 0; margin: 24px 0 8px; }
+  .lrow { display: flex; gap: 12px; align-items: stretch; }
+  .lrow + .lrow { margin-top: 26px; position: relative; }
+  .lrow + .lrow::before {
+    content: "▼";
+    position: absolute; top: -22px; left: 50%;
+    transform: translateX(-50%);
+    color: var(--ink-faint); font-size: 12px;
+  }
+  .lbox {
+    flex: 1;
+    background: var(--card);
+    border: 1.5px solid var(--accent-border);
+    border-radius: 10px;
+    padding: 12px 16px;
+  }
+  .lbox .t { font-weight: 700; font-size: 14.5px; color: var(--ink); }
+  .lbox .d { font-size: 12.5px; color: var(--ink-faint); font-family: var(--mono); margin-top: 2px; }
+  .lbox .e { font-size: 13px; color: var(--ink-soft); margin-top: 5px; }
+  .lbox.core { background: #fff8e6; border-color: #e5c26a; }
+  .lbox.core .t::after { content: "核心"; font-size: 11px; color: #8a6d1a; background: #f5e3ad; border-radius: 4px; padding: 1px 7px; margin-left: 8px; vertical-align: 2px; }
+
+  /* 循环流程图 */
+  .loop { display: flex; align-items: stretch; gap: 0; margin: 24px 0 6px; flex-wrap: wrap; }
+  .loop .node {
+    flex: 1 1 200px;
+    background: var(--card);
+    border: 1.5px solid var(--accent-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    min-width: 180px;
+  }
+  .loop .node h4 { margin: 0 0 6px; font-size: 15px; color: var(--accent); }
+  .loop .node p { font-size: 13px; margin: 0; line-height: 1.6; }
+  .loop .arrow {
+    display: flex; align-items: center;
+    padding: 0 10px;
+    color: var(--ink-faint);
+    font-size: 20px;
+  }
+  .loop-back {
+    margin: 14px 0 0;
+    text-align: center;
+    font-size: 13px;
+    color: var(--ink-faint);
+    border-top: 1.5px dashed var(--accent-border);
+    padding-top: 8px;
+  }
+
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; background: var(--card); border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+  th, td { border-bottom: 1px solid var(--line); padding: 10px 14px; text-align: left; vertical-align: top; color: var(--ink-soft); }
+  th { background: var(--accent-soft); color: var(--ink); font-weight: 700; font-size: 13px; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td code, th code { white-space: nowrap; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
+  .two-col .col { border-radius: 12px; padding: 20px 24px; }
+  .col.good { background: var(--good-bg); border: 1px solid #bfe8cf; }
+  .col.bad { background: var(--warn-bg); border: 1px solid #f0d5b0; }
+  .col h3 { margin-top: 0; }
+  .col.good h3 { color: var(--good); }
+  .col.bad h3 { color: var(--warn); }
+  .col li { color: var(--ink-soft); }
+
+  .statrow { display: flex; flex-wrap: wrap; gap: 14px; margin: 20px 0; }
+  .stat {
+    flex: 1 1 150px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 18px;
+    text-align: center;
+  }
+  .stat .v { font-size: 22px; font-weight: 700; color: var(--accent); font-family: var(--mono); }
+  .stat .k { font-size: 12.5px; color: var(--ink-faint); margin-top: 2px; }
+
+  /* 双图示意 */
+  .dualgraph { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin: 24px 0; }
+  @media (max-width: 760px) { .dualgraph { grid-template-columns: 1fr; } }
+  .dg { background: var(--card); border: 1.5px solid var(--accent-border); border-radius: 12px; padding: 16px 18px; }
+  .dg h4 { margin: 0 0 8px; font-size: 14.5px; color: var(--accent); }
+  .dg ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--ink-soft); }
+  .dg.mid { background: var(--accent-soft); display: flex; align-items: center; justify-content: center; text-align: center; font-size: 13.5px; color: var(--accent-deep); font-weight: 600; }
+
+  footer {
+    margin-top: 60px; padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 13px; color: var(--ink-faint);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="kicker">Architecture Review · 架构分析</div>
+    <h1>ARTEX 架构与功能设计分析</h1>
+    <div class="sub">LLM 多 Agent 驱动的自主渗透测试平台 —— Go 单体 + 双图架构 + 事件驱动引擎，围绕「平台治理 vs 目标防御」构建完整审批体系。</div>
+    <div class="meta">
+      <span>RuoJi6/ARTEX（fork 自 Autumn-27/ARTEX）</span>
+      <span>AGPL-3.0</span>
+      <span>Go 1.26 · norma SDK · PostgreSQL · go-mitmproxy</span>
+      <span>分析日期 2026-11-18</span>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+
+  <nav class="toc">
+    <b>目录</b>
+    <a href="#s1">1 · 一句话定位</a>
+    <a href="#s2">2 · 总体分层</a>
+    <a href="#s3">3 · 双图架构</a>
+    <a href="#s4">4 · 事件驱动引擎闭环</a>
+    <a href="#s5">5 · 自主性机制</a>
+    <a href="#s6">6 · 上下文生命周期 cold-digest</a>
+    <a href="#s7">7 · 安全边界与审批体系</a>
+    <a href="#s8">8 · 支撑子系统</a>
+    <a href="#s9">9 · 前端与 skills</a>
+    <a href="#s10">10 · 工程特点与评价</a>
+  </nav>
+
+  <!-- 1 -->
+  <section id="s1">
+    <h2><span class="no">01</span>一句话定位</h2>
+    <div class="callout">
+      <b>ARTEX 是一个 LLM 多 Agent 驱动的自主渗透测试平台</b>（AGPL-3.0 开源，README 声明仅供学习研究与本地隔离环境验证）：Go 单体后端 + 内嵌 Next.js 前端的单二进制 + PostgreSQL。Agent 能力由同作者的 norma SDK 提供（<code>agentcore / tool / permission / harness / memory / transcript</code>）。仓库是原项目 Autumn-27/ARTEX 的独立维护 fork，保留原始提交历史。
+    </div>
+    <div class="statrow">
+      <div class="stat"><div class="v">125k</div><div class="k">Go 总行数<br>（447 个文件）</div></div>
+      <div class="stat"><div class="v">53k / 35k</div><div class="k">server / db 行数<br>（API+引擎 / 双图落地）</div></div>
+      <div class="stat"><div class="v">≈60</div><div class="k">PostgreSQL 表<br>（schema.sql 幂等迁移）</div></div>
+      <div class="stat"><div class="v">1+N</div><div class="k">每任务 planner(1) +<br>worker(×N，默认 3)</div></div>
+      <div class="stat"><div class="v">7</div><div class="k">探索图节点类型<br>begin/goal/intent/fact/finding/hint/digest</div></div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="s2">
+    <h2><span class="no">02</span>总体分层</h2>
+    <p>关键工程选择是<b>进程内单体的 goroutine 编排</b>——没有外部队列、没有独立 agent 进程，每个任务就是「1 个 plannerLoop + N 个 workerLoop」两组 goroutine，状态全部落在 Postgres 双图里。这让「重启即恢复」非常简单（重启后任务从图状态续跑），代价是单机扩展上限。</p>
+
+    <div class="layerdiagram">
+      <div class="lrow">
+        <div class="lbox"><div class="t">前端 Next.js</div><div class="d">静态导出 → go:embed → 单二进制 (:8787)</div><div class="e">仪表盘 · 任务 · 资产覆盖图 · 流量 · 工作空间 · 系统配置</div></div>
+      </div>
+      <div class="lrow">
+        <div class="lbox"><div class="t">server 层</div><div class="d">net/http · REST /api/* · JWT · SSE · Manager · Engine</div><div class="e">Manager 托管任务/引擎/store 生命周期；Engine 调度 planner 与 worker</div></div>
+      </div>
+      <div class="lrow">
+        <div class="lbox core"><div class="t">agent 层（norma SDK）</div><div class="d">goals · planner(1) · worker(×N) · mainagent(人在环路)</div><div class="e">ToolSet 把双图暴露成 LLM 工具；工具目录可被 DB 覆盖描述</div></div>
+      </div>
+      <div class="lrow">
+        <div class="lbox"><div class="t">db 层</div><div class="d">PostgreSQL / pgx · schema.sql go:embed 幂等建表</div><div class="e">资产图 + 探索图 + 活动流 + 治理数据（≈60 张表）</div></div>
+        <div class="lbox"><div class="t">支撑子系统</div><div class="d">traffic · guard/intercept · enrich · llmpool · mcphttp · notify · report</div><div class="e">记录型 MITM 代理 · 审批门 · 异步补全 · 模型池 · 通知 · 报告</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="s3">
+    <h2><span class="no">03</span>核心设计一：双图架构（系统的数据脊梁）</h2>
+    <p>把「目标是什么」和「测到了什么程度」拆成两张图，靠锚点相连 <span class="fileref">db/schema.sql:153-283</span>：</p>
+
+    <div class="dualgraph">
+      <div class="dg">
+        <h4>资产图（全局共享真值库）</h4>
+        <ul>
+          <li><code>companies / assets / company_scope</code></li>
+          <li>六类节点：root_domain / ip / subdomain / app / service / endpoint</li>
+          <li>每类用<b>部分唯一索引</b>做去重 key（endpoint=(url,method)，service 按 http/other 分两种）</li>
+          <li><b>父子关系、归属、去重全部由程序计算，Agent 只提交原始信息</b>（insert_assets）——机制上防止模型污染真值库</li>
+        </ul>
+      </div>
+      <div class="dg mid">
+        <div>锚点表<br>exploration_anchors<br>(node_id, asset_id)<br>──────<br>覆盖度 = 锚点的视图</div>
+      </div>
+      <div class="dg">
+        <h4>探索图（每任务独立推进链）</h4>
+        <ul>
+          <li>七种节点 begin/goal/intent/fact/finding/hint/digest</li>
+          <li><b>每种 kind 独立状态机 CHECK 约束</b>（intent 八态：open/running/paused/done/blocked/exhausted/stopped/deleted）</li>
+          <li>五种边：spawns / derived_from / yields / proves / covers</li>
+          <li>每步执行写 activity 过程库</li>
+        </ul>
+      </div>
+    </div>
+
+    <ul>
+      <li><b>意图即任务队列</b>：frontier 是部分索引 <code>WHERE kind='intent' AND state='open' ORDER BY priority DESC</code> <span class="fileref">schema.sql:239</span>，worker 用 <code>claimNext</code>（CAS 式 state 翻转）领取——双图同时就是调度数据结构。</li>
+      <li><b>资产测试覆盖度</b>：沿锚点表既能沿探索方向看「打的是哪些资产」，也能从资产反查「被哪些意图测过、得出过什么」；前端力导向覆盖图（范围内资产 + 已测高亮）就是这张表的视图。</li>
+    </ul>
+  </section>
+
+  <!-- 4 -->
+  <section id="s4">
+    <h2><span class="no">04</span>核心设计二：事件驱动的引擎闭环</h2>
+    <p><code>Engine.Run</code> <span class="fileref">server/engine.go:798</span> 为每个任务拉起 plannerLoop + N 个 workerLoop + 任务级超时协调器：</p>
+
+    <div class="loop">
+      <div class="node"><h4>① 唤醒</h4><p>图变更 <code>t.Notify()</code> → <b>800ms debounce 合并</b>突发唤醒（engine.go:891）；600s 心跳兜底防饿死（engine.go:861）</p></div>
+      <div class="arrow">→</div>
+      <div class="node"><h4>② 规划</h4><p><code>planner.Plan</code>（agent/planner.go:357）读图态势，派 0..N 个带 asset_ids 的意图——<b>大多数唤醒派 0 个</b>（无新方向即沉默）</p></div>
+      <div class="arrow">→</div>
+      <div class="node"><h4>③ 执行</h4><p>workerLoop <code>claimNext</code> 领一条意图（engine.go:1057），Worker.Execute 用真实工具执行，每步写 activity，即停</p></div>
+      <div class="arrow">→</div>
+      <div class="node"><h4>④ 写回</h4><p>fact / asset / finding 写回双图 → 触发下一轮规划；<code>prove_goal</code> 逐个证明目标后任务落 done</p></div>
+    </div>
+    <div class="loop-back">← 事件驱动闭环：图一变就唤醒 planner，直到目标全部被证明 →</div>
+
+    <h3>防御性状态门（并发正确性）</h3>
+    <ul>
+      <li>paused / deleting / 终态 / 超时收尾中（settling）/ goalless（人工直投）各有独立分支 <span class="fileref">engine.go:880-938</span></li>
+      <li><code>beginTaskOperation</code> 计数防止 delete 在「LLM 返回与最终 DB 写回之间」观察到假静止 <span class="fileref">engine.go:939</span></li>
+      <li><code>kill_work</code> 用 <code>context.WithCancelCause</code> 按<b>单条意图</b>粒度取消，而非杀整个任务</li>
+      <li>goalless 分支：无 open 目标时 planner 不跑（跑了会误杀用户直投意图），任务结束改由 frontier 抽干决定——纯 Go 判断，不烧 LLM</li>
+    </ul>
+  </section>
+
+  <!-- 5 -->
+  <section id="s5">
+    <h2><span class="no">05</span>核心设计三：三个自主性机制</h2>
+    <table>
+      <tr><th>机制</th><th>实现</th><th>解决的问题</th></tr>
+      <tr>
+        <td><b>worker 间过程级信息交换</b></td>
+        <td><code>search_all_worker_traces / get_worker_trace</code> <span class="fileref">agent/tools.go</span>：在本任务其他 work 的 activity 过程库按关键字检索（自动排除自己）、按步骤取详情</td>
+        <td>有价值的观察（报错/隐藏参数）常出现在执行过程里而非正式 fact；信息以「执行过程」为粒度横向流动，边界不变</td>
+      </tr>
+      <tr>
+        <td><b>planner 共享 todolist</b></td>
+        <td><code>TodoStore</code> 按 explorationID 持久 <span class="fileref">agent/planner.go:110</span>；planner 每次唤醒是全新会话，清单跨唤醒共享</td>
+        <td>多步串行利用链（发现注入点→取凭据→横向）记录一次，每轮只对「前置 fact 已存在」的下一步派意图——<b>在无状态会话 + 事件驱动环境下稳定推进多步链路</b>，是全系统最关键的一手</td>
+      </tr>
+      <tr>
+        <td><b>steer / kill 干预</b></td>
+        <td><code>steerHooks</code> 在 worker 下一次工具调用前 drain 纠偏消息 <span class="fileref">engine.go:550</span>；planner 与主 agent 均可注入</td>
+        <td>运行中的意图可被中途纠偏或按粒度终止，无需等整轮结束</td>
+      </tr>
+    </table>
+  </section>
+
+  <!-- 6 -->
+  <section id="s6">
+    <h2><span class="no">06</span>核心设计四：上下文生命周期（cold-digest）</h2>
+    <p>长任务跑几十轮，探索图会膨胀。ARTEX 的做法不是 token 窗口截断，而是<b>图上的冷节点压缩</b>（<span class="fileref">agent/coldgraph.go</span> + <span class="fileref">agent/compaction.go</span>）：</p>
+    <ul>
+      <li><code>coldgraph.go</code> 刻意做成<b>无 DB、无 LLM 依赖的纯图算法</b>（冷判定、连通块分组 §3、同父单例拯救 §3.1），便于单测；</li>
+      <li>节点带 <code>content_version</code> 与 <code>cold_since_round</code>：连续 ≥R 轮无下游分支即「冷」；压缩把 ≥2 的冷节点块经 LLM 折叠成 <code>digest</code> 节点（<code>covers</code> 边指回成员），状态机内置 <code>active/superseded</code> 支持版本更替；</li>
+      <li>三种模式：<code>maintain</code>（每轮同步簿记，不调 LLM）、<code>minor/major</code>（后台折叠，签名不变的 body 复用 §5.3）；</li>
+      <li>提交前<b>活性复查</b>：压缩期间复活的成员被丢弃，digest 永不覆盖热节点；每任务同时只一个压缩、冷却间隔。</li>
+    </ul>
+  </section>
+
+  <!-- 7 -->
+  <section id="s7">
+    <h2><span class="no">07</span>核心设计五：安全边界与审批体系</h2>
+    <div class="callout">
+      这是工程上最有特色的部分：把<b>「平台治理」和「目标防御」刻意区分开</b>。治理策略本身也是数据（DB 规则，可禁用可删除），不硬编码在引擎里。
+    </div>
+    <pre><span class="c"># guard (PreToolUse hook) 的三级拦截流水线 — guard/guard.go:83</span>
+<span class="b">① DB 拦截规则</span>   静态 sed / shell 静态分析 / python 模块环境检查（intercept/shell_static.go 等）
+      <span class="c">│ 未命中</span>
+<span class="b">② LLM fallback judge</span>  可接外部 jev 审查服务（intercept/jev/client.go, api.typesafe.ai）
+      <span class="c">│</span>
+<span class="b">③ 三态裁决</span>     allow → 放行并留痕 · deny → 拦截留痕
+               ask   → pendingManager channel <span class="y">同步阻塞</span> worker，直到人工审批落地</pre>
+    <ul>
+      <li><b>反绕过设计</b>：<code>systemBlockMessage</code> <span class="fileref">guard.go:126-141</span> 把拦截信息改写成「ARTEX 平台管控·非目标防御」。裸的「禁止/403」会被渗透 agent 当成 WAF 而尝试改包绕过——明确告知「这是平台政策不是目标防御」，agent 才会换方向而不是对抗闸门。</li>
+      <li><b>Observer 失败归因</b>（postToolUse，G5）：工具结果分类为 blocked/error/ok，planner 据此换策略而非在 403 上重复撞墙 <span class="fileref">guard.go:143-163</span>。</li>
+      <li><b>操作约束</b> <code>task_constraints</code>（allow/deny 文本，<span class="fileref">schema.sql:287</span>）：goals 分解器第 0 轮从任务描述提取，运行时可编辑，每轮注入 planner/worker system prompt。</li>
+      <li><b>资产拦截规则</b> <code>asset_intercept_rules / task_intercept_rules</code>：网络层限制任务能访问什么。</li>
+      <li><b>MCP 服务端</b> <span class="fileref">server/mcp_server.go</span>：对外暴露 list_tasks / spawn_task / pause / resume / add_task_hint；令牌分权限范围（read / task:create / task:control），支持企业限定、每小时建任务上限、来源白名单（可信代理 X-Forwarded-For 解析）、调用审计留 2 万条。README 坦率解释了「/mcp 为何不经过 Basic Auth」（一个请求只有一个 Authorization 头）。</li>
+      <li><b>全量审计</b>：每次工具调用过 PreToolUse 留环形 2000 条审计；拦截历史/任务拦截页/审批记录详情三处可查。</li>
+    </ul>
+  </section>
+
+  <!-- 8 -->
+  <section id="s8">
+    <h2><span class="no">08</span>支撑子系统</h2>
+    <table>
+      <tr><th>模块</th><th>设计要点</th></tr>
+      <tr><td><code>traffic/</code>（4.4k 行）</td><td>基于 go-mitmproxy 的<b>记录型 MITM 代理</b>（:8788），CA 证书留痕；worker 所有 HTTP 强制走代理，请求/响应落 SQLite（大 body spill 到磁盘），漏洞可绑定流量证据回放；上游代理链、passthrough 域名、UA 随机化（20 个浏览器样本轮选，HTTP_USER_AGENT.md 逐出口排查）</td></tr>
+      <tr><td><code>llmpool/</code></td><td>多 LLM 配置<b>链式 failover</b>：Rank 高者先行、同 Rank 轮流领队做负载分摊；健康策略 + 任务级绑定；绑定配置不可用时<b>不回退默认模型</b>而是暂停该 worker 槽位 <span class="fileref">engine.go:763</span></td></tr>
+      <tr><td><code>llmrec/</code></td><td>LLM 调用录制（「LLM 记录」页审计与复现）</td></tr>
+      <tr><td><b>finding 工作流</b></td><td>漏洞上报（addFinding）→ <b>Reporter Agent</b> 归并：同一实际缺陷折成 finding_case 文件夹 + 统一报告（候选分页检索、证据按需读、写入校验版本）→ <b>retester Agent</b> 复测（仍可复现/已修复/无法确认，成功即自动改状态）→ 统一导出</td></tr>
+      <tr><td><code>enrich/</code></td><td>DNS/HTTP 异步补全（dnsx/miekg）：资产入库后台补 favicon/标题/技术栈，不占 worker 时间</td></tr>
+      <tr><td><code>notify/</code></td><td>飞书/钉钉/企微/Telegram/Email/Webhook 六渠道 + 事件过滤 + 脱敏（notify/mask.go）</td></tr>
+      <tr><td><code>sidequestion/</code></td><td>人在环路的<b>侧问</b>：独立小会话回答操作员对当前执行的问题，不污染主 agent 上下文</td></tr>
+      <tr><td><code>selfupdate/</code> + start.sh</td><td>页面一键更新：SHA256 校验 → -h 冒烟 → 暂存 artex.new → 退出由守护脚本换装 → 连续 3 次启动失败自动回滚 artex.old</td></tr>
+      <tr><td><code>scheduler/</code> + agent_triggers</td><td>定时/事件（finding、goal、工具调用）触发自定义 agent run，串行/并行与合并模式可配</td></tr>
+      <tr><td>任务归档 / ScopeSentry 同步</td><td>归档 v4 格式（兼容读 v1–v3）；从 ScopeSentry 按项目/任务维度导入资产</td></tr>
+      <tr><td><code>mcphttp/</code></td><td>ARTEX 作为 <b>MCP 客户端</b>调外部 MCP server（SSE + Streamable HTTP 双传输）——与「对外提供 MCP」是两个方向</td></tr>
+    </table>
+  </section>
+
+  <!-- 9 -->
+  <section id="s9">
+    <h2><span class="no">09</span>前端与 skills</h2>
+    <p><b>前端</b>：Next.js App Router 静态导出（<code>web/src/app/</code>）——<code>(auth)/login|setup</code>、<code>(main)/dashboard | chat | function/{tasks, findings, assets, traffic, workspace, repeater, commands, schedules, llm-records, sync}</code>、<code>system/{agents, llm, tools, skills, mcp, intercept, notify, settings, logs}</code>。亮点是<b>资产覆盖图</b>（力导向图 + 已测高亮 + 折叠展开）与<b>探索链路可视化</b>（直接渲染探索图血缘边）。<code>NEXT_PUBLIC_MOCK=1</code> 纯前端 Mock 模式支撑在线 Demo，i18n 中英双语。</p>
+    <p><b>skills/</b>：SKILL.md 格式（同 Claude skills 生态），<code>api-recon</code>（明确声明「仅侦察、禁止漏洞利用」的边界表）、<code>playwright-cli</code>、<code>scopesentry</code>。技能是 markdown 提示 + 脚本包，经 skills 目录绑定给 agent。</p>
+    <p><b>工具目录</b>：内置工具经 <code>agent/toolcatalog.go</code> 播种进 DB tools 表——<b>handler 永远在代码层，DB 只能改模型看到的描述与缺省入参</b>；按 agent 过滤绑定（mainagent/planner/worker/goals/auto/pentest/asset_mapper），Web 端「工具」页可管理。</p>
+  </section>
+
+  <!-- 10 -->
+  <section id="s10">
+    <h2><span class="no">10</span>工程特点与评价</h2>
+    <div class="two-col">
+      <div class="col good">
+        <h3>亮点</h3>
+        <ul>
+          <li><b>双图 + 锚点</b>：过程与事实各归其位；frontier 直接建在图状态上，调度与状态零冗余。</li>
+          <li><b>DB 约束做并发正确性</b>：每种节点独立状态机 CHECK + CAS 式 claim，多 goroutine 不靠分布式锁也保持一致。</li>
+          <li><b>cold-digest</b>：上下文压缩变成图操作，纯算法层可单测，签名复用 + 活性复查工程上很细。</li>
+          <li><b>治理体系完整</b>：平台管控 vs 目标防御的语义区分、三级审批流水线、审计全覆盖，远比同类 agent 产品细致。</li>
+          <li><b>交付链成熟</b>：schema 幂等迁移（重启即迁移，CHECK 变更都有 DO $$ 重建）、单二进制五平台 + SHA256SUMS + 多架构镜像、页面一键更新带自动回滚。</li>
+        </ul>
+      </div>
+      <div class="col bad">
+        <h3>代价与约束</h3>
+        <ul>
+          <li><b>单机垂直扩展</b>：状态全在 Postgres、引擎在进程内，没有水平扩展的故事；README 依赖本地 SQLite/文件目录。</li>
+          <li><b>包边界靠文件名</b>：server/ 5.3 万行里 API、编排、治理高度耦合在一个包内。</li>
+          <li><b>审查依赖模型</b>：LLM fallback judge 意味着安全审查本身依赖模型判断（规则优先缓解但不消除误判面）。</li>
+          <li><b>设计文档外置</b>：中文注释大量 §2.3/§5.1 式内部编号引用，但设计文档不在仓库，外部读者只能靠注释反推。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    基于 commit 快照分析 · 仓库 <code>https://github.com/RuoJi6/ARTEX</code> · 所有 <span class="fileref">file:line</span> 引用均指向仓库内源码 · 仅供学习研究，使用须遵守项目 AGPL-3.0 许可与作者声明
+  </footer>
+
+</div>
+</body>
+</html>

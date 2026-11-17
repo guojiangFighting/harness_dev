@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LongHorizon-Harness 架构分析</title>
+<style>
+  :root {
+    --ink: #1c2333;
+    --ink-soft: #4a5468;
+    --ink-faint: #7a8499;
+    --accent: #3457d5;
+    --accent-soft: #eef2ff;
+    --accent-border: #c3d0f7;
+    --bg: #f7f8fb;
+    --card: #ffffff;
+    --line: #e3e7ef;
+    --code-bg: #f1f3f9;
+    --good: #0c7a4d;
+    --good-bg: #ecfaf2;
+    --warn: #9a4b00;
+    --warn-bg: #fdf3e7;
+    --mono: "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    font-size: 15.5px;
+    line-height: 1.75;
+  }
+  .page { max-width: 1080px; margin: 0 auto; padding: 0 24px 80px; }
+
+  header.hero {
+    background: linear-gradient(135deg, #1b2a6b 0%, #3457d5 55%, #5a7bff 100%);
+    color: #fff;
+    padding: 52px 24px 44px;
+    margin-bottom: 36px;
+  }
+  .hero-inner { max-width: 1080px; margin: 0 auto; }
+  .hero .kicker {
+    display: inline-block;
+    font-size: 13px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    background: rgba(255,255,255,.14);
+    border: 1px solid rgba(255,255,255,.28);
+    border-radius: 999px;
+    padding: 4px 14px;
+    margin-bottom: 18px;
+  }
+  .hero h1 { margin: 0 0 10px; font-size: 34px; line-height: 1.3; font-weight: 700; }
+  .hero .sub { font-size: 16.5px; color: rgba(255,255,255,.88); max-width: 780px; }
+  .hero .meta {
+    margin-top: 26px;
+    display: flex; flex-wrap: wrap; gap: 10px;
+    font-size: 13px;
+  }
+  .hero .meta span {
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.25);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-family: var(--mono);
+  }
+
+  nav.toc {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 24px;
+    margin-bottom: 36px;
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    font-size: 14px;
+  }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  nav.toc b { width: 100%; color: var(--ink-faint); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; }
+
+  section { margin-bottom: 44px; }
+  h2 {
+    font-size: 24px;
+    margin: 0 0 6px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--line);
+    font-weight: 700;
+  }
+  h2 .no { color: var(--accent); margin-right: 10px; font-family: var(--mono); font-size: 20px; }
+  h3 { font-size: 17.5px; margin: 26px 0 8px; font-weight: 700; }
+  p { margin: 10px 0; color: var(--ink-soft); }
+  p strong, li strong { color: var(--ink); }
+  ul, ol { color: var(--ink-soft); padding-left: 24px; margin: 8px 0; }
+  li { margin: 5px 0; }
+
+  code {
+    font-family: var(--mono);
+    font-size: .86em;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: #24305c;
+    word-break: break-all;
+  }
+  .fileref { font-family: var(--mono); font-size: .82em; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-border); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+  pre {
+    background: #10162b;
+    color: #dbe4ff;
+    border-radius: 10px;
+    padding: 18px 20px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    border: 1px solid #232f56;
+  }
+  pre .c { color: #7f8fc4; }
+  pre .g { color: #7ee2a8; }
+  pre .y { color: #ffd479; }
+  pre .b { color: #8ab4ff; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 22px 26px;
+    margin: 16px 0;
+    box-shadow: 0 1px 2px rgba(28,35,51,.04);
+  }
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 0 10px 10px 0;
+    padding: 14px 20px;
+    margin: 18px 0;
+    color: var(--ink-soft);
+  }
+  .callout b { color: var(--ink); }
+
+  /* 分层架构图 */
+  .layerdiagram { display: flex; flex-direction: column; gap: 0; margin: 24px 0 8px; }
+  .lrow { display: flex; gap: 12px; align-items: stretch; }
+  .lrow + .lrow { margin-top: 26px; position: relative; }
+  .lrow + .lrow::before {
+    content: "▼";
+    position: absolute; top: -22px; left: 50%;
+    transform: translateX(-50%);
+    color: var(--ink-faint); font-size: 12px;
+  }
+  .lbox {
+    flex: 1;
+    background: var(--card);
+    border: 1.5px solid var(--accent-border);
+    border-radius: 10px;
+    padding: 12px 16px;
+  }
+  .lbox .t { font-weight: 700; font-size: 14.5px; color: var(--ink); }
+  .lbox .d { font-size: 12.5px; color: var(--ink-faint); font-family: var(--mono); margin-top: 2px; }
+  .lbox .e { font-size: 13px; color: var(--ink-soft); margin-top: 5px; }
+  .lbox.core { background: #fff8e6; border-color: #e5c26a; }
+  .lbox.core .t::after { content: "核心"; font-size: 11px; color: #8a6d1a; background: #f5e3ad; border-radius: 4px; padding: 1px 7px; margin-left: 8px; vertical-align: 2px; }
+
+  /* 循环流程图 */
+  .loop { display: flex; align-items: stretch; gap: 0; margin: 24px 0 6px; flex-wrap: wrap; }
+  .loop .node {
+    flex: 1 1 200px;
+    background: var(--card);
+    border: 1.5px solid var(--accent-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    min-width: 180px;
+  }
+  .loop .node h4 { margin: 0 0 6px; font-size: 15px; color: var(--accent); }
+  .loop .node p { font-size: 13px; margin: 0; line-height: 1.6; }
+  .loop .arrow {
+    display: flex; align-items: center;
+    padding: 0 10px;
+    color: var(--ink-faint);
+    font-size: 20px;
+  }
+  .loop-back {
+    margin: 14px 0 0;
+    text-align: center;
+    font-size: 13px;
+    color: var(--ink-faint);
+    border-top: 1.5px dashed var(--accent-border);
+    padding-top: 8px;
+  }
+
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; background: var(--card); border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+  th, td { border-bottom: 1px solid var(--line); padding: 10px 14px; text-align: left; vertical-align: top; color: var(--ink-soft); }
+  th { background: var(--accent-soft); color: var(--ink); font-weight: 700; font-size: 13px; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td code, th code { white-space: nowrap; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
+  .two-col .col { border-radius: 12px; padding: 20px 24px; }
+  .col.good { background: var(--good-bg); border: 1px solid #bfe8cf; }
+  .col.bad { background: var(--warn-bg); border: 1px solid #f0d5b0; }
+  .col h3 { margin-top: 0; }
+  .col.good h3 { color: var(--good); }
+  .col.bad h3 { color: var(--warn); }
+  .col li { color: var(--ink-soft); }
+
+  .statrow { display: flex; flex-wrap: wrap; gap: 14px; margin: 20px 0; }
+  .stat {
+    flex: 1 1 150px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 18px;
+    text-align: center;
+  }
+  .stat .v { font-size: 22px; font-weight: 700; color: var(--accent); font-family: var(--mono); }
+  .stat .k { font-size: 12.5px; color: var(--ink-faint); margin-top: 2px; }
+
+  footer {
+    margin-top: 60px; padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 13px; color: var(--ink-faint);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="kicker">Architecture Review · 架构分析</div>
+    <h1>LongHorizon-Harness 架构分析</h1>
+    <div class="sub">面向 Computer-Use Agent 的 Loop Engineering 系统 —— 在现有 Agent CLI 外部工程化「规划 → 执行 → 验证 → 恢复」的长期运行闭环。</div>
+    <div class="meta">
+      <span>AMAP-ML/LongHorizon-Harness</span>
+      <span>v0.1.8 · MIT License</span>
+      <span>Python ≥3.10 · FastAPI · React/Vite</span>
+      <span>分析日期 2026-11-18</span>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+
+  <nav class="toc">
+    <b>目录</b>
+    <a href="#s1">1 · 一句话定位</a>
+    <a href="#s2">2 · 总体分层</a>
+    <a href="#s3">3 · 执行内核：三角色循环</a>
+    <a href="#s4">4 · 适配层</a>
+    <a href="#s5">5 · 进程模型与监督层</a>
+    <a href="#s6">6 · Web API 与前端</a>
+    <a href="#s7">7 · 扩展面</a>
+    <a href="#s8">8 · eval 评测套件</a>
+    <a href="#s9">9 · 运行时数据布局</a>
+    <a href="#s10">10 · 架构评价</a>
+  </nav>
+
+  <!-- 1 -->
+  <section id="s1">
+    <h2><span class="no">01</span>一句话定位</h2>
+    <div class="callout">
+      <b>LongHorizon-Harness 不实现自己的 LLM Agent。</b>它在现有 Agent CLI（Claude Code、Codex CLI、OpenCode、DeepSeek Harness）外面套一个「规划 → 执行 → 验证 → 保存/恢复」的执行闭环，让同一个 Agent 能跨桌面 GUI 和终端持续工作数十小时。核心理念是作者所称的 <b>Loop Engineering</b>：工程化模型外部的验证、纠错与恢复，而不是优化单轮 prompt。
+    </div>
+    <div class="statrow">
+      <div class="stat"><div class="v">≈11k</div><div class="k">核心 Python 行数<br>（src/lh_harness）</div></div>
+      <div class="stat"><div class="v">≈6k</div><div class="k">前端 TypeScript 行数<br>（frontend/）</div></div>
+      <div class="stat"><div class="v">4</div><div class="k">Agent 后端适配器<br>Claude/Codex/OpenCode/DeepSeek</div></div>
+      <div class="stat"><div class="v">3+2</div><div class="k">闭环角色：Manager / Executor（GUI、CLI 各一）/ Auditor</div></div>
+      <div class="stat"><div class="v">3</div><div class="k">评测复现包<br>WeaveBench / OSWorld-V2 / TB 2.1</div></div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="s2">
+    <h2><span class="no">02</span>总体分层</h2>
+    <p>依赖方向自上而下<b>单向引用</b>：前端只碰 API，API 只碰 supervisor，supervisor 只拉起 <code>lh-harness run</code> 子进程，循环内核只依赖两个抽象接口。这两个接口是整个架构的脊柱：</p>
+    <ul>
+      <li><strong><code>AgentAdapter</code></strong> <span class="fileref">adapters/base.py:10</span> — 单方法 Protocol：<code>run_episode(prompt, env, budget, live_trajectory_path) -&gt; EpisodeResult</code></li>
+      <li><strong><code>Environment</code></strong> <span class="fileref">environment/base.py:9</span> — 四方法 Protocol：<code>exec / screenshot / upload / download</code></li>
+    </ul>
+
+    <div class="layerdiagram">
+      <div class="lrow">
+        <div class="lbox"><div class="t">前端</div><div class="d">frontend/web (React 18 + Vite) → frontend/core (无框架 TS 逻辑)</div><div class="e">工作台 UI：发起任务、审批、注入指令、轨迹浏览</div></div>
+      </div>
+      <div class="lrow">
+        <div class="lbox"><div class="t">API 层</div><div class="d">webapi/server.py (FastAPI，REST + WebSocket)</div><div class="e">/api/runs CRUD · snapshot · events · 审批/指令/停止/恢复</div></div>
+      </div>
+      <div class="lrow">
+        <div class="lbox"><div class="t">监督层</div><div class="d">supervisor/ (RunSupervisor + 文件型 ControlBus + lifecycle)</div><div class="e">进程归属、幂等创建、停止/恢复、状态投影</div></div>
+      </div>
+      <div class="lrow">
+        <div class="lbox core"><div class="t">执行内核</div><div class="d">manager.py (2480 行)</div><div class="e">Manager → Executor → Auditor 三角色循环 + 人工门禁</div></div>
+      </div>
+      <div class="lrow">
+        <div class="lbox"><div class="t">适配层</div><div class="d">adapters/ (AgentAdapter → 各 Agent CLI)</div><div class="e">命令模板 + 输出解析 + 权限角色映射</div></div>
+        <div class="lbox"><div class="t">环境层</div><div class="d">environment/ (Environment → LocalEnvironment)</div><div class="e">exec/screenshot/upload/download；进程组管理与轨迹 tee</div></div>
+      </div>
+      <div class="lrow">
+        <div class="lbox"><div class="t">扩展面</div><div class="d">mcp_server/ · plugins/</div><div class="e">MCP 生命周期工具 · computer-use 插件管理</div></div>
+        <div class="lbox"><div class="t">评测复现</div><div class="d">eval/ (三个固定版本评测包)</div><div class="e">benchmark 副本 + 冻结的旧版 harness + 实验脚本</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="s3">
+    <h2><span class="no">03</span>执行内核：三角色循环</h2>
+    <p>主循环在 <span class="fileref">manager.py:168</span> 的 <code>_run_impl</code>。每一轮（<code>ManagedRound</code>，<span class="fileref">types.py:92</span>）按固定状态机推进：</p>
+
+    <div class="loop">
+      <div class="node"><h4>① Manager 规划</h4><p>读取「原始任务 + 自己维护的任务状态 + Auditor 报告」，输出计划；解析出 <code>next_step ∈ {gui, cli, done, blocked, invalid, ask}</code></p></div>
+      <div class="arrow">→</div>
+      <div class="node"><h4>② Executor 执行</h4><p>按 next_step 绑定 GUI 或 CLI Executor，<b>全新上下文</b>只做一个边界明确的子任务</p></div>
+      <div class="arrow">→</div>
+      <div class="node"><h4>③ Auditor 验收</h4><p>独立检查真实文件/界面/日志，输出结构化 <code>AuditReport</code>；格式不合格先走一次格式修复 episode</p></div>
+      <div class="arrow">→</div>
+      <div class="node"><h4>④ 人工门禁</h4><p>每轮结束评估触发条件（完成 / 轮次耗尽 / 阻塞 / 连续失败），必要时阻塞等待操作员决议</p></div>
+    </div>
+    <div class="loop-back">← 未完成则回到 ①，从原始目标 + 最后一个已验证检查点恢复继续；完成则输出最终报告 →</div>
+
+    <h3>关键设计约束</h3>
+    <ul>
+      <li><strong>可信状态与不可信输出严格分离</strong>：Auditor 报告才是「可信中间状态」，Executor 的自述只是证据。Manager 宣称 <code>done</code> 时必须有此前一轮 clean 状态的 Auditor 报告背书，否则被驳回并注入修复信号 <span class="fileref">manager.py:525-563</span></li>
+      <li><strong>一切落盘，文件即状态</strong>：每轮写 <code>logs/role_orchestration/rounds/round_XXX/</code>（三角色的输入输出、任务状态、契约）+ 追加式 <code>events.jsonl</code> 事件账本，无数据库</li>
+      <li><strong>恢复 = 重建上下文</strong>：<code>resume</code> 从账本重放全部轮次、重建 Manager 规划上下文继续跑 <span class="fileref">manager.py:269-283</span>，不做 checkpoint 序列化</li>
+      <li><strong>故障分级</strong>：角色超时是「可恢复失败」（记入账本，下一轮恢复）；provider 硬故障才终止（<code>provider_errors.py</code>）；任何崩溃都在 <span class="fileref">manager.py:128</span> 的 <code>run()</code> 边界兜底写出终态报告，杜绝「进程死了但 supervisor 认为它还活着」</li>
+      <li><strong>角色独立预算</strong>：三角色各有 <code>EpisodeBudget</code> 超时（<span class="fileref">types.py:108</span>），且每个角色可分别指定不同的后端与模型（Manager/Auditor 用强模型、Executor 用便宜模型）</li>
+      <li><strong>协议化角色输出</strong>：角色 prompt + 解析器（<code>role_prompts.py:529</code> 的 <code>parse_role_manager_next_step</code> 等）+ 格式修复 Agent，三层保证机器可读</li>
+    </ul>
+  </section>
+
+  <!-- 4 -->
+  <section id="s4">
+    <h2><span class="no">04</span>适配层：把 Agent CLI 变成一条 shell 命令</h2>
+    <p><span class="fileref">adapters/cli_agent.py:31</span> 的 <code>CommandAgentAdapter</code> 是通用实现：<b>prompt 写入运行私有的临时文件 → 按命令模板拼出 shell 命令 → <code>env.exec</code> 执行 → 用后端专属解析器从 stdout 提取可见输出 → 封装 <code>EpisodeResult</code></b>。各后端因此只是「命令模板 + 输出解析器 + 配置映射」的差异：</p>
+    <table>
+      <tr><th>后端</th><th>命令形态</th><th>要点</th></tr>
+      <tr><td><code>CodexAdapter</code></td><td><code>codex exec --json ... &lt; prompt.md</code></td><td>base_url / 模型 / MCP 全部经 <code>-c key=value</code> 内联 TOML 覆盖，不改用户 <code>~/.codex</code>；默认绕过自身沙箱 <span class="fileref">adapters/codex.py:25</span></td></tr>
+      <tr><td><code>ClaudeCodeAdapter</code></td><td><code>claude -p ...</code></td><td><code>claude_permissions.py</code> 按角色下发权限：Manager/Auditor 只读、Executor 可写工作区</td></tr>
+      <tr><td><code>OpenCodeAdapter</code></td><td><code>opencode run prompt</code></td><td>标准化 JSON 结果 + 按角色读写权限</td></tr>
+      <tr><td><code>DeepSeekHarnessAdapter</code></td><td><code>dsh --profile headless</code></td><td>隔离 <code>DSH_HOME</code>；headless 仅返回最终答案</td></tr>
+    </table>
+    <ul>
+      <li>新增一个 Agent 后端 = 写一个几十行的适配器类，不动内核。</li>
+      <li>适配器注入 <code>hidden_paths</code> 声明 <span class="fileref">cli_agent.py:122</span>：明确告知 Agent 本 run 自己的日志目录是禁区，防止角色间上下文泄漏。</li>
+      <li>secret 脱敏内建在日志与可见输出路径上（<code>cli_agent.py:24</code> 的 <code>redact_secrets</code>）。</li>
+    </ul>
+  </section>
+
+  <!-- 5 -->
+  <section id="s5">
+    <h2><span class="no">05</span>进程模型与监督层</h2>
+    <p>三种运行拓扑共用同一个执行内核：</p>
+    <table>
+      <tr><th>拓扑</th><th>入口</th><th>结构</th></tr>
+      <tr><td>纯 CLI</td><td><code>lh-harness run</code></td><td>单进程跑循环</td></tr>
+      <tr><td>CLI + 内嵌面板</td><td><code>lh-harness run --dashboard</code></td><td>同进程起 FastAPI + <code>attached_only</code> 受限 supervisor <span class="fileref">cli.py:1737</span>，可安全 stop/abort 自己</td></tr>
+      <tr><td>Web 工作台</td><td><code>lh-harness web</code></td><td>API 进程 + RunSupervisor，每个任务一个独立 worker 子进程</td></tr>
+    </table>
+
+    <p>Web 拓扑下 <code>create_run</code> 通过 <code>[sys.executable, -m, lh_harness, run, ..., --supervised]</code> 拉起 worker <span class="fileref">supervisor/service.py:1391</span> —— <b>worker 就是普通的 <code>lh-harness run</code></b>，supervisor 刻意不重写循环，只做进程归属与命令边界。API 进程与 worker 之间没有 socket，通信全靠 run 目录下的<b>文件型 ControlBus</b> <span class="fileref">supervisor/control_bus.py:464</span>：</p>
+
+<pre><span class="c"># runs/&lt;run-id&gt;/control/</span>
+commands.jsonl          <span class="c"># 追加命令（append-only）</span>
+command_receipts.jsonl  <span class="c"># worker 回执（applied/rejected/failed/cancelled）</span>
+status.json             <span class="c"># 生命周期状态（creating/running/waiting_approval/…）</span>
+owner.json              <span class="c"># pid 归属 + resume epoch</span>
+.control.lock           <span class="c"># flock 锁文件（序列化点，而非数据文件）</span></pre>
+
+    <p>双端以 <code>flock</code> + 乐观 revision 并发控制。这一层的工程防御密度非常高（README 中「原生 Windows 不可用」的原因也在这里——依赖 POSIX 原语）：</p>
+    <ul>
+      <li><b>symlink 防护</b>：全程 <code>O_NOFOLLOW</code> 锚定打开，拒绝符号链接劫持 run 目录 <span class="fileref">control_bus.py:54-176</span></li>
+      <li><b>幂等创建</b>：<code>Idempotency-Key</code> + 请求指纹 + 先落盘 reservation 再 spawn；HTTP 重试 / 崩溃后重试都不会拉起第二个 worker <span class="fileref">service.py:1442-1558</span></li>
+      <li><b>resume epoch</b>：以代数计数隔离旧 epoch 的命令回执 <span class="fileref">lifecycle.py:48</span></li>
+      <li><b>worker 认领校验</b>：<code>--supervised</code> 模式认领 reservation 时逐字段校验（task/agent/model/pid 不匹配即拒绝）<span class="fileref">cli.py:233-345</span></li>
+    </ul>
+
+    <h3>人工门禁（human-in-the-loop）</h3>
+    <p><span class="fileref">dashboard/gate.py:106</span> 的 <code>make_human_hook</code>：每轮结束由可插拔规则 <span class="fileref">dashboard/rules.py</span>（默认连续 3 轮失败触发，阈值可用 <code>LH_HARNESS_DASHBOARD_FAILURE_LIMIT</code> 调整）分类出五种对话框：<code>completed / max_rounds / needs_input / needs_human / repeated_failure</code>，创建 approval 后阻塞等待 UI 决议；决议动作 + 附加指令 + 追加轮数注入下一轮。</p>
+    <p><code>DashboardState</code> <span class="fileref">dashboard/state.py:155</span> 是关键复用点——它既是 runs 目录的只读投影（rounds / artifacts / trajectory / 事件），又是 approvals 与操作员指令的持久化层，因此 <b>worker 无 HTTP 服务也能参与审批流</b>（<code>control_enabled</code> 模式，<span class="fileref">cli.py:1715-1724</span>），同一个 human hook 在三种拓扑下复用。</p>
+  </section>
+
+  <!-- 6 -->
+  <section id="s6">
+    <h2><span class="no">06</span>Web API 与前端</h2>
+    <p><strong><code>webapi/server.py</code></strong>（1317 行，FastAPI）：</p>
+    <table>
+      <tr><th>类别</th><th>端点</th><th>说明</th></tr>
+      <tr><td>查询</td><td><code>GET /api/runs</code> · <code>/snapshot</code> · <code>/events</code> · <code>/status</code></td><td>全量投影 + <code>EventTailer</code> 增量重放</td></tr>
+      <tr><td>实时流</td><td><code>WS /api/runs/{id}/stream</code></td><td>事件推送；Bearer 经 WebSocket subprotocol 传递（不进 URL）</td></tr>
+      <tr><td>只读工件</td><td><code>/rounds/{n}/artifacts/*</code> · <code>/trajectory/{role}</code></td><td>每轮的 prompt/输出/轨迹/截图</td></tr>
+      <tr><td>控制</td><td><code>POST /instructions</code> · <code>/approvals/{id}/resolve</code> · <code>/abort</code> · <code>/stop</code> · <code>/resume</code></td><td>全部落到 ControlBus 命令 + 回执</td></tr>
+    </table>
+    <p>安全面：Bearer token、Host/Origin 白名单、请求体大小上限、安全响应头中间件 <span class="fileref">server.py:669</span>。</p>
+
+    <p><strong>前端是双包结构</strong>：</p>
+    <ul>
+      <li><code>frontend/core</code> —— <b>无框架 TS 逻辑层</b>：事件归一化、runFeed reducer（快照与流式事件去重合并）、状态/轨迹/工件视图投影、命令解析（如把用户输入解析成 <code>/new run --agent codex</code>），用纯 Node + esbuild 测试。设计意图是投影逻辑不绑定 React，可独立测试与复用。</li>
+      <li><code>frontend/web</code> —— React 18 + Vite 壳。数据流是 REST snapshot 与 WebSocket 并行加载，同一 reducer 去重 <span class="fileref">useRunFeed.ts:32</span>。Vite 直接把产物构建进 <code>src/lh_harness/_frontend/web/dist</code> <span class="fileref">vite.config.ts:20</span> 打进 wheel——安装即自带 UI，无需 Node。</li>
+      <li>中英双语 i18n（<code>i18n.tsx</code>）。</li>
+    </ul>
+  </section>
+
+  <!-- 7 -->
+  <section id="s7">
+    <h2><span class="no">07</span>扩展面</h2>
+    <h3>MCP server</h3>
+    <p><span class="fileref">mcp_server/stdio_server.py:170</span> 把 run 生命周期（<code>lh_start_run / lh_run_status / lh_stop_run / 注入指令</code> 等）暴露为 MCP 工具，内部复用同一个 <code>RunSupervisor</code> + <code>ControlBus</code>——所以别的 Agent（比如 Claude Code 本身）可以编程方式启动并监控 harness 任务，审批与指令走的也是同一条命令通道（<code>inject_instruction</code> 命令与 Dashboard 同路径）。</p>
+    <h3>插件系统</h3>
+    <p><span class="fileref">plugins/</span>：机器级安装 computer-use 插件（npm 分发），按 Agent 生成其<b>原生格式</b>的 MCP 配置文件（Claude 用 <code>.mcp.json</code>，Codex 用 TOML），运行时按 <code>codex-computer-use &gt; open-computer-use &gt; clawdcursor</code> 优先级自动选取 <span class="fileref">plugins/state.py:25</span>。安装与任务执行彻底解耦：<code>run</code> 从不安装/修改插件，GUI 能力完全外包给插件。</p>
+  </section>
+
+  <!-- 8 -->
+  <section id="s8">
+    <h2><span class="no">08</span>eval/：三个评测复现包</h2>
+    <p>每个包 = <b>上游 benchmark 的固定版本副本 + 固定的旧版 harness 兼容副本 + 实验脚本</b>：</p>
+    <table>
+      <tr><th>目录</th><th>benchmark</th><th>内嵌 harness</th></tr>
+      <tr><td><code>eval/TB-harness/</code></td><td>Terminal-Bench 2.1</td><td><code>Harness/src/</code>（orchestrator/verifier 命名，含 docker/ssh 环境）</td></tr>
+      <tr><td><code>eval/WeaveBench-harness/</code></td><td>WeaveBench（fork）</td><td><code>cua-harness/src/cua_harness/</code> + <code>integrations/weavebench.py</code> 把 WeaveBench VM 包装成 <code>Environment</code></td></tr>
+      <tr><td><code>eval/OSWorldv2-harness/</code></td><td>OSWorld-V2（对齐官方 <code>v2026.06.24</code> release，含本地 patch 记录）</td><td>同构的 <code>cua-harness</code> + hybrid runner</td></tr>
+    </table>
+    <ul>
+      <li>这些副本是 <code>manager/auditor</code> 的前身（当时叫 orchestrator/verifier），并比主包多了 <code>docker.py</code>/<code>ssh.py</code> 环境和直接 LLM 调用 judge 的 <code>llm.py</code>。README 明确说明新集成应使用 <code>src/lh_harness/</code>，评测用副本是为可复现而冻结的。</li>
+      <li><code>skills/weavebench-cua-reproduce/SKILL.md</code> 是给 AI Agent 用的复现操作手册（SKILL 格式），明确界定了哪些步骤可自动化、哪些不支持。</li>
+      <li>OSWorldv2 的 <code>docs/</code> 记录了实验参数总表与相对官方仓库的本地差异（VM runtime disk、guest 扩容 timeout 等）。</li>
+    </ul>
+  </section>
+
+  <!-- 9 -->
+  <section id="s9">
+    <h2><span class="no">09</span>运行时数据布局</h2>
+    <p>所有状态都是文件，一次运行的可检查/可恢复/可复现完全由目录结构保证：</p>
+<pre>runs/&lt;run-id&gt;/
+├── control/                  <span class="c"># ControlBus：命令、回执、状态、owner（supervisor ↔ worker 协议）</span>
+├── logs/
+│   ├── report.json           <span class="c"># 终态报告（含最终自然语言回复）</span>
+│   ├── role_orchestration/
+│   │   ├── events.jsonl      <span class="c"># 追加式事件账本（审计与 resume 的依据）</span>
+│   │   ├── rounds/round_001/ <span class="c"># 每轮：manager_input / manager_plan / task_state /</span>
+│   │   │                     <span class="c">#   task_contract / executor_output / auditor_report /</span>
+│   │   │                     <span class="c">#   *_raw_trajectory.jsonl / human_instructions.txt</span>
+│   │   └── report.json
+│   ├── manager_episodes/  gui_executor_episodes/  …   <span class="c"># 各角色 episode 原始记录</span>
+│   └── screenshots/          <span class="c"># GUI 轮次的终态截图</span>
+└── harness/                  <span class="c"># 面向任务工作区的状态镜像（远端环境亦同步写入）</span></pre>
+  </section>
+
+  <!-- 10 -->
+  <section id="s10">
+    <h2><span class="no">10</span>架构评价</h2>
+    <div class="two-col">
+      <div class="col good">
+        <h3>亮点</h3>
+        <ul>
+          <li><b>零侵入适配</b>：不重写 Agent 循环，只用 <code>run_episode</code> 单接口包住任意 CLI，模型 / 后端 / 角色 三维自由组合。</li>
+          <li><b>状态即文件</b>：账本 + 事件流天然可检查、可恢复、可审计；resume 是重建上下文而非反序列化。</li>
+          <li><b>验证是硬约束</b>：把「验证」做成独立角色与机制约束（completion 必须有 clean audit 背书），这是其声称提升完成率的机制基础。</li>
+          <li><b>工程防御密度高</b>：幂等、symlink 防护、脱敏、有界读取、崩溃兜底——对长时无人值守运行是必要的。</li>
+          <li><b>关注点分层的复用设计</b>：core TS 逻辑与 React 解耦、human hook 三拓扑复用、supervisor 与 MCP/插件同一条命令通道。</li>
+        </ul>
+      </div>
+      <div class="col bad">
+        <h3>代价与约束</h3>
+        <ul>
+          <li><b>巨型状态机</b>：核心循环 <code>manager.py</code> 近 2500 行，<code>if next_step == …</code> 分支重复模式多，扩展路由类型改动面大。</li>
+          <li><b>文件 ControlBus 的边界</b>：多机 / 远程场景不如消息队列，且依赖 POSIX 原语（Windows 需 WSL2，issue #70 跟踪原生支持）。</li>
+          <li><b>环境抽象尚薄</b>：<code>Environment</code> 主包目前只有 <code>local</code> 实现，GUI 能力完全外包给插件。</li>
+          <li><b>评测副本漂移</b>：eval 内嵌三份旧 harness（orchestrator/verifier）与主包（manager/auditor）概念命名不一致，维护上是已知债务。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    基于 commit 快照分析 · 仓库 <code>https://github.com/AMAP-ML/LongHorizon-Harness</code> · 所有 <span class="fileref">file:line</span> 引用均指向 <code>src/lh_harness/</code> 下源码
+  </footer>
+
+</div>
+</body>
+</html>
