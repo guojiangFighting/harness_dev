@@ -1,0 +1,21 @@
+{
+  "name": "dsh-custom-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal custom agent scaffold on dsh-base (+ headless runner). Replace plugins/ with your own.",
+  "files": [
+    "cordis.patch.yml",
+    "plugins/**/*.js",
+    "BASE-PLUGINS.md",
+    "README.md"
+  ],
+  "engines": {
+    "dsh": ">=0.2.0 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

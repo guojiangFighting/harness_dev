@@ -1,0 +1,82 @@
+# Your overlay on top of dsh-base (+ headless if you used --from-default-profile headless).
+# Patch semantics: whole-row replace for `config`; use `disabled: true` to turn rows off.
+#
+# 1) Insert your plugins
+# 2) Optionally disable base plugins you do not need (see BASE-PLUGINS.md)
+
+# Optional: set deployment persona without a plugin (whole-config replace).
+# - id: system-prompt
+#   config:
+#     personaPrefix: 'You are my custom agent.'
+
+- insert:
+    - id: hello-persona
+      name: './plugins/hello-persona/index.js'
+
+    - id: hello-tool
+      name: './plugins/hello-tool/index.js'
+
+# Example: turn off capabilities you will replace yourself.
+# Uncomment as needed after reading BASE-PLUGINS.md.
+
+# - id: tool-web
+#   disabled: true
+# - id: web
+#   disabled: true
+# - id: web-search-deepseek
+#   disabled: true
+# - id: web-deepseek-api
+#   disabled: true
+# - id: web-fetch-http
+#   disabled: true
+
+# - id: tool-subagent
+#   disabled: true
+# - id: tool-subagent-fork
+#   disabled: true
+# - id: tool-subagent-control
+#   disabled: true
+# - id: tool-agent-team
+#   disabled: true
+# - id: agent-team
+#   disabled: true
+# - id: subagent
+#   disabled: true
+# - id: subagent-spawn-in-process
+#   disabled: true
+# - id: subagent-fork-in-process
+#   disabled: true
+
+# - id: tool-workflow
+#   disabled: true
+# - id: workflow-ptc
+#   disabled: true
+# - id: ptc-runtime
+#   disabled: true
+# - id: tool-executor-ptc
+#   disabled: true
+
+# - id: tool-todo
+#   disabled: true
+# - id: tool-goal
+#   disabled: true
+# - id: goal
+#   disabled: true
+# - id: goal-round-driver
+#   disabled: true
+# - id: command-goal
+#   disabled: true
+# - id: plan-mode
+#   disabled: true
+
+# - id: tool-skill
+#   disabled: true
+# - id: skill
+#   disabled: true
+# - id: skill-filesystem
+#   disabled: true
+
+# - id: session-telemetry-otel
+#   disabled: true
+# - id: otel
+#   disabled: true
